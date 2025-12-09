@@ -1,39 +1,105 @@
-const char* INDEX_HTML = R"rawliteral(
+//const char* INDEX_HTML = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ESP32 S3 HID Controller</title>
+  <title>ESP32 S3 HID</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  /*#####################################
+  #                                     #
+  #                  CSS                #
+  #                                     #
+  #####################################*/
+
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f4; }
-    h1 { color: #333; }
-    .status { margin-bottom: 20px; font-weight: bold; }
-    .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 400px; margin: 0 auto; }
-    button { padding: 15px 10px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; background-color: #007bff; color: white; transition: background-color 0.2s; }
-    button:active { background-color: #0056b3; } /* For mobile response */
-    #mouse-pad { background-color: #fff; border: 2px solid #ccc; width: 100%; height: 200px; margin: 20px auto; border-radius: 10px; cursor: crosshair; }
-    .spacer { visibility: hidden; }
+    body { 
+      font-family: Arial, 
+      sans-serif; 
+      text-align: center; 
+      margin: 0; 
+      padding: 20px; 
+      background-color: #f4f4f4; 
+    }
+
+    h1 { 
+      color: #333; 
+    }
+
+    .status { 
+      margin-bottom: 20px; 
+      font-weight: bold; 
+    }
+
+    .controls-grid { 
+      display: grid; 
+      grid-template-columns: repeat(3, 1fr); 
+      gap: 10px; 
+      max-width: 400px; 
+      margin: 0 auto; 
+    }
+
+    button { 
+      padding: 15px 10px; 
+      font-size: 16px; 
+      border: none; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      background-color: #007bff; 
+      color: white; 
+      transition: background-color 0.2s; 
+    }
+
+    button:active { 
+      background-color: #0056b3; 
+    }
+
+    #mouse-pad { 
+      background-color: #fff; 
+      border: 2px solid #ccc; 
+      width: 100%; height: 200px; 
+      margin: 20px auto; 
+      border-radius: 10px; 
+      cursor: crosshair; 
+    }
+
+    .spacer { 
+      visibility: hidden; 
+    }
   </style>
 </head>
+
+
+/*#####################################
+#                                     #
+#                 HTML                #
+#                                     #
+#####################################*/
+
 <body>
   <h1>ESP32 S3 HID Controller</h1>
   <p class="status">Status: <span id="ws-status" style="color: red;">DISCONNECTED</span></p>
 
   <div class="controls-grid">
     <div class="spacer"></div>
-    <button onmousedown="sendCmd(0x21, 1)" onmouseup="sendCmd(0x22, 1)" ontouchstart="sendCmd(0x21, 1)" ontouchend="sendCmd(0x22, 1)">Left Click</button>
+    <button onpointerdown="sendCmd(0x21, 1)" onpointerup="sendCmd(0x22, 1)">Left Click</button>
     <div class="spacer"></div>
-    <button onmousedown="sendCmd(0x11, 0x1A)" onmouseup="sendCmd(0x12, 0x1A)" ontouchstart="sendCmd(0x11, 0x1A)" ontouchend="sendCmd(0x12, 0x1A)">W</button>
-    <button onmousedown="sendCmd(0x11, 0x04)" onmouseup="sendCmd(0x12, 0x04)" ontouchstart="sendCmd(0x11, 0x04)" ontouchend="sendCmd(0x12, 0x04)">A</button>
-    <button onmousedown="sendCmd(0x11, 0x16)" onmouseup="sendCmd(0x12, 0x16)" ontouchstart="sendCmd(0x11, 0x16)" ontouchend="sendCmd(0x12, 0x16)">S</button>
-    <button onmousedown="sendCmd(0x11, 0x07)" onmouseup="sendCmd(0x12, 0x07)" ontouchstart="sendCmd(0x11, 0x07)" ontouchend="sendCmd(0x12, 0x07)">D</button>
+    <button onpointerdown="sendCmd(0x11, 0x1A)" onpointerup="sendCmd(0x12, 0x1A)">W</button>
+    <button onpointerdown="sendCmd(0x11, 0x04)" onpointerup="sendCmd(0x12, 0x04)">A</button>
+    <button onpointerdown="sendCmd(0x11, 0x16)" onpointerup="sendCmd(0x12, 0x16)">S</button>
+    <button onpointerdown="sendCmd(0x11, 0x07)" onpointerup="sendCmd(0x12, 0x07)">D</button>
     <button onclick="sendCmd(0x23, 2)">Right Click</button>
     <button onclick="sendCmd(0x23, 4)">Middle Click</button>
   </div>
 
   <p>Mouse Pad (Drag to move)</p>
   <div id="mouse-pad"></div>
-  
+
+  /*#####################################
+  #                                     #
+  #                  JS                 #
+  #                                     #
+  #####################################*/
+
   <script>
     var gateway = `ws://${window.location.hostname}:81/`;
     var websocket;
@@ -72,7 +138,6 @@ const char* INDEX_HTML = R"rawliteral(
       console.log("Message from server: " + event.data);
     }
     
-    // NEW: Function for simple button presses (Key or Mouse Button)
     // Sends a 2-byte command: [OPCODE, VALUE]
     function sendCmd(opcode, value) {
       if (websocket.readyState === 1) {
@@ -90,31 +155,30 @@ const char* INDEX_HTML = R"rawliteral(
     var lastY = 0;
     
     function initMousePad() {
-      mousePad.addEventListener('mousedown', startDrag);
-      mousePad.addEventListener('touchstart', startDrag);
+      // NEU: pointerdown statt mousedown/touchstart
+      mousePad.addEventListener('pointerdown', startDrag);
       
-      document.addEventListener('mousemove', drag);
-      document.addEventListener('touchmove', drag);
-      
-      document.addEventListener('mouseup', endDrag);
-      document.addEventListener('touchend', endDrag);
+      // NEU: pointermove/pointerup statt mousemove/touchmove/mouseup/touchend
+      document.addEventListener('pointermove', drag);
+      document.addEventListener('pointerup', endDrag);
+      // Fügen Sie pointercancel hinzu, um den Drag-Zustand bei unerwarteten Abbrüchen (z. B. Gerätewechsel) zurückzusetzen.
+      document.addEventListener('pointercancel', endDrag); 
     }
     
-    function getClientCoords(e) {
-        return {
-            x: e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : null),
-            y: e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : null)
-        };
-    }
-
+    // Wir benötigen getClientCoords() nicht mehr, da Pointer Events clientX/clientY direkt bereitstellen
     function startDrag(e) {
       e.preventDefault();
+      // Wenn es sich nicht um die primäre Maustaste (Button 0) oder den ersten Touch handelt, ignorieren.
+      if (e.button !== 0 && e.pointerType === 'mouse') return; 
+      
       isDragging = true;
-      var coords = getClientCoords(e);
-      if (coords.x !== null) {
-          lastX = coords.x;
-          lastY = coords.y;
-      }
+      lastX = e.clientX;
+      lastY = e.clientY;
+
+      // Pointer Capture: Stellt sicher, dass das pointermove-Event 
+      // weiterhin auf dem mousePad registriert wird, auch wenn der Pointer 
+      // (z.B. der Finger) das Element verlässt.
+      mousePad.setPointerCapture(e.pointerId);
     }
     
     // Format: [0x01, dx_L, dx_H, dy_L, dy_H]
@@ -122,11 +186,9 @@ const char* INDEX_HTML = R"rawliteral(
       if (!isDragging) return;
       
       e.preventDefault();
-      var coords = getClientCoords(e);
-      if (coords.x === null) return;
       
-      var dx = coords.x - lastX;
-      var dy = coords.y - lastY;
+      var dx = e.clientX - lastX;
+      var dy = e.clientY - lastY;
       
       // Scale and clamp to signed 16-bit integer range
       var moveX = Math.round(dx * 2);
@@ -146,12 +208,16 @@ const char* INDEX_HTML = R"rawliteral(
           console.log(`Sent: MOVE:${moveX},${moveY}`);
       }
       
-      lastX = coords.x;
-      lastY = coords.y;
+      lastX = e.clientX;
+      lastY = e.clientY;
     }
     
     function endDrag(e) {
-      isDragging = false;
+      if (isDragging) {
+        isDragging = false;
+        // Pointer Release: Gibt das Capture frei.
+        mousePad.releasePointerCapture(e.pointerId);
+      }
     }
     
     // Format: [0x51, steps_L, steps_H]
