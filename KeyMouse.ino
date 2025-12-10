@@ -6,7 +6,6 @@
 #include "USBHIDMouse.h"
 #include "USBHIDTouchpad.h"
 #include <WebServer.h>
-
 #include "index_html.h"
 
 USBHIDKeyboardUTF8 keyboard;
