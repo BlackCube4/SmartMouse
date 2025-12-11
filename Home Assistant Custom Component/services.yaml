@@ -1,0 +1,147 @@
+# ---------------------------------------
+# MOUSE SERVICES
+# ---------------------------------------
+move:
+  description: Send relative mouse movement (Opcode 0x01)
+  fields:
+    x:
+      description: Delta X (signed int16)
+      example: 5
+      required: true
+      selector:
+        number:
+          mode: box
+    y:
+      description: Delta Y (signed int16)
+      example: -3
+      required: true
+      selector:
+        number:
+          mode: box
+
+move_absolute:
+  description: Send absolute mouse positioning (Opcode 0x02)
+  fields:
+    x:
+      description: Absolute X position (0 to 32767)
+      example: 16384
+      required: true
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 32767
+    y:
+      description: Absolute Y position (0 to 32767)
+      example: 16384
+      required: true
+      selector:
+        number:
+          mode: box
+          min: 0
+          max: 32767
+
+button:
+  description: Send mouse button press, release, or click (Opcodes 0x21, 0x22, 0x23)
+  fields:
+    button:
+      description: Button to control (left/right/middle)
+      example: left
+      required: true
+      selector:
+        select:
+          options:
+            - left
+            - right
+            - middle
+    mode:
+      description: Action to perform (click/down/up)
+      example: click
+      required: true
+      selector:
+        select:
+          options:
+            - click
+            - down
+            - up
+
+# ---------------------------------------
+# SCROLL/TOUCHPAD SERVICES
+# ---------------------------------------
+scroll_wheel:
+  description: Scroll using the low-resolution mouse wheel report (Opcode 0x51)
+  fields:
+    delta:
+      description: Wheel delta (signed int16 steps, positive for down/forward)
+      example: 1
+      required: true
+      selector:
+        number:
+          mode: box
+
+touchpad_scroll:
+  description: Scroll using the high-resolution Precision Touchpad report (Opcode 0x52/0x53)
+  fields:
+    delta:
+      description: High-res scroll delta (signed int16 steps). **Use 0 to send the scroll end gesture (0x53).**
+      example: 10
+      required: true
+      selector:
+        number:
+          mode: box
+
+# ---------------------------------------
+# KEYBOARD SERVICES (Press, Release, Send)
+# ---------------------------------------
+key_control:
+  description: Send key press, release, or send for a single HID keycode (Opcodes 0x11, 0x12, 0x13)
+  fields:
+    keycode:
+      description: The **HID Usage Code** (decimal or hex) for the key (e.g., 4 for 'A').
+      example: 4
+      required: true
+      selector:
+        text:
+    mode:
+      description: Action to perform (press/release/send)
+      example: send
+      required: true
+      selector:
+        select:
+          options:
+            - press
+            - release
+            - send
+
+media_control:
+  description: Send media key press, release, or send (Opcodes 0x31, 0x32, 0x33)
+  fields:
+    code:
+      description: The 16-bit **Consumer Page Usage Code** (e.g., 0xB0 or 176 for Play/Pause). This value is ignored for 'release' mode.
+      example: 176
+      required: true
+      selector:
+        number:
+          mode: box
+          min: 1
+          max: 65535
+    mode:
+      description: Action to perform (press/release/send)
+      example: send
+      required: true
+      selector:
+        select:
+          options:
+            - press
+            - release
+            - send
+
+text_send:
+  description: Send a string of text via the keyboard report (Opcode 0x41)
+  fields:
+    text:
+      description: The text string to type.
+      example: Hello World!
+      required: true
+      selector:
+        text:
