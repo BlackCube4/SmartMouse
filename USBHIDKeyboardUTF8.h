@@ -21,7 +21,7 @@ public:
 
 private:
     // Hilfsfunktion: UTF-8 zu HID-Scancode konvertieren
-    bool utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t &hidCode, bool &needsShift);
+    bool utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t &hidCode, bool &needsShift, bool &needsAltGr);
     
     // Hilfsfunktion: Länge eines UTF-8 Zeichens ermitteln
     size_t getUtf8CharLength(uint8_t firstByte);

@@ -7,7 +7,11 @@
 #define HID_KEY_U_UMLAUT   0x2F  // ü (US: [)
 #define HID_KEY_O_UMLAUT   0x33  // ö (US: ;)
 #define HID_KEY_A_UMLAUT   0x34  // ä (US: ')
+#define HID_KEY_E          0x08  // e (für Euro Zeichen)
+
+// Modifier Keys
 #define HID_KEY_SHIFT_LEFT 0xE1
+#define HID_KEY_ALT_RIGHT  0xE6  // Alt Gr (Right Alt)
 
 // Hilfsfunktion: UTF-8 Zeichenlänge ermitteln
 size_t USBHIDKeyboardUTF8::getUtf8CharLength(uint8_t firstByte) {
@@ -19,9 +23,10 @@ size_t USBHIDKeyboardUTF8::getUtf8CharLength(uint8_t firstByte) {
 }
 
 // UTF-8 zu HID-Scancode konvertieren
-bool USBHIDKeyboardUTF8::utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t &hidCode, bool &needsShift) {
+bool USBHIDKeyboardUTF8::utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t &hidCode, bool &needsShift, bool &needsAltGr) {
     hidCode = 0;
     needsShift = false;
+    needsAltGr = false;
 
     // 1-Byte (ASCII): Standard-Handling über Parent-Klasse
     if (len == 1 && utf8[0] < 0x80) {
@@ -29,7 +34,7 @@ bool USBHIDKeyboardUTF8::utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t 
     }
 
     // 2-Byte UTF-8: Deutsche Umlaute
-    if (len >= 2 && utf8[0] == 0xC3) {
+    if (len == 2 && utf8[0] == 0xC3) {
         switch (utf8[1]) {
             // Kleinbuchstaben
             case 0xA4: hidCode = HID_KEY_A_UMLAUT; return true;  // ä
@@ -44,18 +49,21 @@ bool USBHIDKeyboardUTF8::utf8ToHidCode(const uint8_t *utf8, size_t len, uint8_t 
         }
     }
 
+    // 3-Byte UTF-8: Euro Zeichen (€) -> 0xE2 0x82 0xAC
+    if (len == 3 && utf8[0] == 0xE2 && utf8[1] == 0x82 && utf8[2] == 0xAC) {
+        hidCode = HID_KEY_E;
+        needsAltGr = true;
+        return true;
+    }
+
     return false; // Unbekanntes Zeichen
 }
 
 // write() für einzelnes Byte/Zeichen
 size_t USBHIDKeyboardUTF8::write(uint8_t c) {
-    // Für ASCII nutzen wir die Standard-Methode
     if (c < 0x80) {
         return USBHIDKeyboard::write(c);
     }
-    
-    // Einzelnes Byte >= 0x80 kann kein vollständiges UTF-8 Zeichen sein
-    // Wir ignorieren es oder geben 0 zurück
     return 0;
 }
 
@@ -70,35 +78,36 @@ size_t USBHIDKeyboardUTF8::write(const uint8_t *buffer, size_t size) {
     while (p < end) {
         size_t charLen = getUtf8CharLength(*p);
         
-        // Prüfen ob genug Bytes verfügbar sind
         if (p + charLen > end) {
-            break; // Unvollständiges Zeichen am Ende
+            break; 
         }
 
         uint8_t hidCode;
         bool needsShift;
+        bool needsAltGr;
         
-        if (utf8ToHidCode(p, charLen, hidCode, needsShift)) {
-            // UTF-8 Sonderzeichen (Umlaut/ß)
-            if (needsShift) {
-                USBHIDKeyboard::pressRaw(HID_KEY_SHIFT_LEFT);
-                delay(5);
-            }
+        if (utf8ToHidCode(p, charLen, hidCode, needsShift, needsAltGr)) {
+            // 1. Modifier drücken
+            if (needsShift) USBHIDKeyboard::pressRaw(HID_KEY_SHIFT_LEFT);
+            if (needsAltGr) USBHIDKeyboard::pressRaw(HID_KEY_ALT_RIGHT);
             
+            if (needsShift || needsAltGr) delay(5);
+            
+            // 2. Taste drücken
             USBHIDKeyboard::pressRaw(hidCode);
             delay(5);
+            
+            // 3. Alles loslassen
             USBHIDKeyboard::releaseRaw(hidCode);
             
-            if (needsShift) {
-                delay(5);
-                USBHIDKeyboard::releaseRaw(HID_KEY_SHIFT_LEFT);
-            }
+            if (needsShift) USBHIDKeyboard::releaseRaw(HID_KEY_SHIFT_LEFT);
+            if (needsAltGr) USBHIDKeyboard::releaseRaw(HID_KEY_ALT_RIGHT);
             
             delay(5);
             written += charLen;
         } else if (charLen == 1 && *p < 0x80) {
             // ASCII-Zeichen
-            if (*p != '\r') {  // CR ignorieren (wie Original)
+            if (*p != '\r') {
                 USBHIDKeyboard::write(*p);
                 written++;
             } else {
@@ -128,15 +137,14 @@ size_t USBHIDKeyboardUTF8::press(const char *utf8char) {
     size_t len = getUtf8CharLength((uint8_t)utf8char[0]);
     uint8_t hidCode;
     bool needsShift;
+    bool needsAltGr;
     
-    if (utf8ToHidCode((const uint8_t *)utf8char, len, hidCode, needsShift)) {
-        if (needsShift) {
-            USBHIDKeyboard::pressRaw(HID_KEY_SHIFT_LEFT);
-        }
+    if (utf8ToHidCode((const uint8_t *)utf8char, len, hidCode, needsShift, needsAltGr)) {
+        if (needsShift) USBHIDKeyboard::pressRaw(HID_KEY_SHIFT_LEFT);
+        if (needsAltGr) USBHIDKeyboard::pressRaw(HID_KEY_ALT_RIGHT);
         return USBHIDKeyboard::pressRaw(hidCode);
     }
     
-    // Fallback für ASCII
     if (len == 1 && utf8char[0] < 0x80) {
         return USBHIDKeyboard::press((uint8_t)utf8char[0]);
     }
@@ -151,16 +159,15 @@ size_t USBHIDKeyboardUTF8::release(const char *utf8char) {
     size_t len = getUtf8CharLength((uint8_t)utf8char[0]);
     uint8_t hidCode;
     bool needsShift;
+    bool needsAltGr;
     
-    if (utf8ToHidCode((const uint8_t *)utf8char, len, hidCode, needsShift)) {
+    if (utf8ToHidCode((const uint8_t *)utf8char, len, hidCode, needsShift, needsAltGr)) {
         size_t result = USBHIDKeyboard::releaseRaw(hidCode);
-        if (needsShift) {
-            USBHIDKeyboard::releaseRaw(HID_KEY_SHIFT_LEFT);
-        }
+        if (needsShift) USBHIDKeyboard::releaseRaw(HID_KEY_SHIFT_LEFT);
+        if (needsAltGr) USBHIDKeyboard::releaseRaw(HID_KEY_ALT_RIGHT);
         return result;
     }
     
-    // Fallback für ASCII
     if (len == 1 && utf8char[0] < 0x80) {
         return USBHIDKeyboard::release((uint8_t)utf8char[0]);
     }

@@ -11,7 +11,6 @@ export class UIBuilder {
       border: "1px solid #2b2c2f",
       color: "#fff",
       userSelect: "none",
-      touchAction: "none",
       padding: "10px",
       fontFamily: "Inter, sans-serif",
       boxSizing: "border-box",
@@ -32,6 +31,7 @@ export class UIBuilder {
       fontSize: fontSize,
       cursor: "pointer",
       transition: "background 0.15s",
+      touchAction: "manipulation", 
     });
 
     btn.addEventListener("pointerdown", () => {
@@ -128,7 +128,7 @@ export class UIBuilder {
 
     const updateLayout = () => {
       expandedArea.style.display = expanded ? "flex" : "none";
-      expandBtn.textContent = expanded ? "▼" : "▲"; // ▲⮝˄ ▼⮟˅
+      expandBtn.textContent = expanded ? "▼" : "▲"; 
     };
 
     Object.assign(root.style, {
@@ -154,6 +154,7 @@ export class UIBuilder {
       alignItems: "center",
       justifyContent: "center",
       fontSize: "15px",
+      touchAction: "none", 
     });
     pad.textContent = "Touchpad";
 
@@ -172,6 +173,7 @@ export class UIBuilder {
       justifyContent: "center",
       fontSize: "18px",
       userSelect: "none",
+      touchAction: "none",
     });
     scrollArea.textContent = "☰";
 
@@ -198,6 +200,10 @@ export class UIBuilder {
 
     gyroHandler.gyroRelBtn = gyroRelBtn;
     gyroHandler.gyroAbsBtn = gyroAbsBtn;
+
+    if (gyroHandler.isCalibrated) {
+         calibrateBtn.style.background = "#2b2c2f";
+    }
 
     const volHandler = (btn, code) => {
       btn.addEventListener("touchstart", (e) => {
@@ -237,10 +243,7 @@ export class UIBuilder {
     calibrateBtn.addEventListener("click", () => {
       if (gyroHandler.calibrating) return gyroHandler.finishCalibration();
       if (gyroHandler.isCalibrated) {
-        gyroHandler.isCalibrated = false;
-        calibrateBtn.textContent = "☑";
-        calibrateBtn.style.background = "#2b2c2f";
-        navigator.vibrate?.(50);
+        gyroHandler.startCalibration(calibrateBtn);
         return;
       }
       gyroHandler.startCalibration(calibrateBtn);
@@ -254,6 +257,7 @@ export class UIBuilder {
       alignItems: "center",
     });
 
+    // --- LIVE INPUT WRAPPER ---
     const liveWrapper = document.createElement("div");
     Object.assign(liveWrapper.style, {
       position: "relative",
@@ -261,17 +265,26 @@ export class UIBuilder {
     });
 
     const liveInput = document.createElement("input");
-    liveInput.type = "text";
+    // WICHTIG: type="password" verhindert Wortvorhersagen und Composition Buffers auf Android.
+    // Das löst das "HalloHallHal"-Problem.
+    liveInput.type = "password"; 
+    liveInput.autocomplete = "off";
+    liveInput.autocorrect = "off";
+    liveInput.autocapitalize = "off";
+    liveInput.spellcheck = false;
+
     Object.assign(liveInput.style, {
       width: "100%",
       padding: "10px",
       borderRadius: "10px",
       background: "#2a2b2e",
       border: "1px solid #323337",
-      color: "transparent",
+      color: "transparent", 
+      // caretColor entfernt
       fontSize: "14px",
       position: "relative",
       paddingInline: "0",
+      textAlign: "center"
     });
 
     const liveInputOverlay = document.createElement("div");
@@ -289,67 +302,40 @@ export class UIBuilder {
     liveWrapper.appendChild(liveInput);
     liveWrapper.appendChild(liveInputOverlay);
 
-    let processingInput = false;
-
+    // --- LIVE INPUT LOGIC (UPDATED) ---
     liveInput.addEventListener("beforeinput", (e) => {
-      e.stopPropagation();
-      
-      // Handle backspace
+      e.preventDefault(); 
+
       if (e.inputType === "deleteContentBackward") {
-        e.preventDefault();
         touchpadHandler.serviceManager.sendKey(42, "send");
-        return;
+      } 
+      else if (e.data) {
+        touchpadHandler.serviceManager.sendText(e.data);
       }
-      
-      // Handle regular character input
-      if (e.data && e.data.length === 1) {
-        e.preventDefault();
-        processingInput = true;
-        
-        // Try to get HID code for the character
-        const hidCode = this.getCharacterHIDCode(e.data);
-        if (hidCode) {
-          const mods = hidCode.mods || [];
-          mods.forEach((m) => touchpadHandler.serviceManager.sendKey(m, "press"));
-          touchpadHandler.serviceManager.sendKey(hidCode.code, "send");
-          mods.forEach((m) => touchpadHandler.serviceManager.sendKey(m, "release"));
-        } else {
-          // Fallback to text send for special characters
-          touchpadHandler.serviceManager.sendText(e.data);
-        }
-        
-        setTimeout(() => { processingInput = false; }, 10);
-      }
+      liveInput.value = "";
     });
 
+    // Fallback für spezielle Tasten
     liveInput.addEventListener("keydown", (e) => {
-      if (processingInput) return;
-      
-      // Only handle special keys (Enter, arrows, etc.)
       const specialKeys = ["Enter", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", 
                           "Home", "End", "PageUp", "PageDown", "Delete", "Tab"];
       
       if (specialKeys.includes(e.key)) {
         e.preventDefault();
-        e.stopPropagation();
-        
         const code = this.getHIDKeycodeFromEvent(e);
         if (code) {
           touchpadHandler.serviceManager.sendKey(code, "send");
         }
       }
+      setTimeout(() => { liveInput.value = ""; }, 0);
     });
 
-    // Fallback for mobile keyboards that don't send keydown events properly
+    // Zusätzliche Sicherheit gegen Ghosting
     liveInput.addEventListener("input", (e) => {
-      e.stopPropagation();
-      const text = liveInput.value;
-      if (text) {
-        touchpadHandler.serviceManager.sendText(text);
         liveInput.value = "";
-      }
     });
 
+    // --- STANDARD TEXT INPUT ---
     const textInput = document.createElement("input");
     textInput.type = "text";
     textInput.placeholder = "Enter text...";
@@ -366,14 +352,16 @@ export class UIBuilder {
     textInput.addEventListener("keydown", (e) => e.stopPropagation());
     textInput.addEventListener("keyup", (e) => e.stopPropagation());
 
+    // --- SEND BUTTON (UPDATED) ---
     const sendTextBtn = this.createButton("→", () => {
       const text = textInput.value;
       if (text) {
         touchpadHandler.serviceManager.sendText(text);
         textInput.value = "";
+      } else {
+        // Leere Box = Enter
+        touchpadHandler.serviceManager.sendKey(40, "send");
       }
-      else
-        touchpadHandler.serviceManager.sendButton("40", "send");
     });
     Object.assign(sendTextBtn.style, {
       width: "15%",
@@ -419,108 +407,16 @@ export class UIBuilder {
     touchpadHandler.setupScrollArea(scrollArea);
   }
 
-  getCharacterHIDCode(char) {
-    // Lowercase letters
-    if (/[a-z]/.test(char)) {
-      return { code: 4 + (char.charCodeAt(0) - 97), mods: [] };
-    }
-    
-    // Uppercase letters
-    if (/[A-Z]/.test(char)) {
-      return { code: 4 + (char.charCodeAt(0) - 65), mods: [0xE1] };
-    }
-    
-    // Numbers
-    if (/[1-9]/.test(char)) {
-      return { code: 30 + (char.charCodeAt(0) - 49), mods: [] };
-    }
-    if (char === "0") {
-      return { code: 39, mods: [] };
-    }
-    
-    // German special characters
-    const germanChars = {
-      "ß": { code: 0x2D, mods: [] },
-      "ü": { code: 0x2F, mods: [] },
-      "ö": { code: 0x33, mods: [] },
-      "ä": { code: 0x34, mods: [] },
-      "Ü": { code: 0x2F, mods: [0xE1] },
-      "Ö": { code: 0x33, mods: [0xE1] },
-      "Ä": { code: 0x34, mods: [0xE1] },
-    };
-    
-    if (germanChars[char]) return germanChars[char];
-    
-    // Common symbols (without shift)
-    const symbolMap = {
-      " ": { code: 44, mods: [] },
-      "-": { code: 45, mods: [] },
-      "=": { code: 46, mods: [] },
-      "[": { code: 47, mods: [] },
-      "]": { code: 48, mods: [] },
-      "\\": { code: 49, mods: [] },
-      ";": { code: 51, mods: [] },
-      "'": { code: 52, mods: [] },
-      "`": { code: 53, mods: [] },
-      ",": { code: 54, mods: [] },
-      ".": { code: 55, mods: [] },
-      "/": { code: 56, mods: [] },
-    };
-    
-    // Common symbols (with shift)
-    const shiftSymbolMap = {
-      "!": { code: 30, mods: [0xE1] },
-      "@": { code: 31, mods: [0xE1] },
-      "#": { code: 32, mods: [0xE1] },
-      "$": { code: 33, mods: [0xE1] },
-      "%": { code: 34, mods: [0xE1] },
-      "^": { code: 35, mods: [0xE1] },
-      "&": { code: 36, mods: [0xE1] },
-      "*": { code: 37, mods: [0xE1] },
-      "(": { code: 38, mods: [0xE1] },
-      ")": { code: 39, mods: [0xE1] },
-      "_": { code: 45, mods: [0xE1] },
-      "+": { code: 46, mods: [0xE1] },
-      "{": { code: 47, mods: [0xE1] },
-      "}": { code: 48, mods: [0xE1] },
-      "|": { code: 49, mods: [0xE1] },
-      ":": { code: 51, mods: [0xE1] },
-      '"': { code: 52, mods: [0xE1] },
-      "~": { code: 53, mods: [0xE1] },
-      "<": { code: 54, mods: [0xE1] },
-      ">": { code: 55, mods: [0xE1] },
-      "?": { code: 56, mods: [0xE1] },
-    };
-    
-    if (symbolMap[char]) return symbolMap[char];
-    if (shiftSymbolMap[char]) return shiftSymbolMap[char];
-    
-    // Return null for characters we can't map (will use text send instead)
-    return null;
-  }
-
   getHIDKeycodeFromEvent(e) {
     const k = e.key;
-    if (k.length === 1) {
-      if (/[a-z]/.test(k)) return 4 + (k.charCodeAt(0) - 97);
-      if (/[A-Z]/.test(k)) return 4 + (k.charCodeAt(0) - 65);
-      if (/[1-9]/.test(k)) return 30 + (k.charCodeAt(0) - 49);
-      if (k === "0") return 39;
-    }
-
     const map = {
-      Enter: 40, Escape: 41, Backspace: 42, Tab: 43, " ": 44,
-      "-": 45, "=": 46, "[": 47, "]": 48, "\\": 49, ";": 51, "'": 52,
-      "`": 53, ",": 54, ".": 55, "/": 56,
+      Enter: 40, Escape: 41, Backspace: 42, Tab: 43,
       Delete: 76, Home: 74, End: 77, PageUp: 75, PageDown: 78,
-      ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
-      "!": 30, "@": 31, "#": 32, "$": 33, "%": 34, "^": 35, "&": 36, "*": 37,
-      "(": 38, ")": 39, "_": 45, "+": 46, "{": 47, "}": 48, "|": 49,
-      ":": 51, '"': 52, "~": 53, "<": 54, ">": 55, "?": 56
+      ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52
     };
     return map[k] || null;
   }
-
+    
   getHIDKeycode(key, code) {
     return this.getHIDKeycodeFromEvent({ key, code });
   }
