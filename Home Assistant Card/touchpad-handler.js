@@ -6,16 +6,16 @@ export class TouchpadHandler {
     
     this.floatDX = 0;
     this.floatDY = 0;
-    this.dragging = false;
-    this.doubleTapDragging = false;
-    this.waitingForSecondTap = false;
     
-    // Constants
-    this.TOUCH_GAIN = config.touch_gain ?? 1.8;
-    this.TAP_THRESHOLD = 200;
-    this.HOLD_THRESHOLD = 500;
-    this.DOUBLE_TAP_THRESHOLD = 300;
-    this.DOUBLE_CLICK_DELAY = 50;
+    // --- CONFIGURATION ---
+    this.TOUCH_GAIN = config.padSensitivity ?? config.touch_gain ?? 1.8;
+    this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
+
+    // Timing (ms)
+    // "Wait for second tap" timer
+    this.CLICK_DELAY = config.double_click_time ?? 250; 
+    // Time to trigger Right Click (Tap 1) or Start Drag (Tap 2+)
+    this.HOLD_TIME = config.hold_time ?? 500;           
     
     this.startFrameLoop();
   }
@@ -30,7 +30,6 @@ export class TouchpadHandler {
         this.floatDY -= dy;
         this.serviceManager.sendMove(dx, dy);
       }
-
       requestAnimationFrame(frameLoop);
     };
     requestAnimationFrame(frameLoop);
@@ -42,43 +41,59 @@ export class TouchpadHandler {
   }
 
   setupPad(pad) {
+    // State Machine Variables
+    let tapCount = 0;           // Tracks 1, 2, 3... taps in a sequence
+    let clickTimer = null;      // The "Wait for second tap" timer
+    let holdTimer = null;       // The "Right Click" or "Drag" timer
+    
+    let isDragging = false;     // True if finger is actually moving
+    let dragActive = false;     // True if we sent 'mousedown' (Left Down)
+    let rightClickDone = false; // True if Tap 1 held long enough for Right Click
+    
     let lastX = 0;
     let lastY = 0;
-    let touchStartTime = 0;
-    let lastTapTime = 0;
-    let holdTimer = null;
-    let singleTapTimer = null;
 
     const startTouch = (e) => {
       e.preventDefault();
-      
-      // Immediately suppress gyro
-      this.gyroHandler.setGyroSuppression(400);
+      this.gyroHandler.setGyroSuppression(400); // Stop gyro interference
       
       const touch = e.touches[0];
       lastX = touch.clientX;
       lastY = touch.clientY;
-      touchStartTime = Date.now();
+      
+      // Reset move state
+      isDragging = false;
+      rightClickDone = false;
 
-      const timeSinceLastTap = Date.now() - lastTapTime;
-
-      if (this.waitingForSecondTap && timeSinceLastTap < this.DOUBLE_TAP_THRESHOLD) {
-        clearTimeout(singleTapTimer);
-        this.waitingForSecondTap = false;
-        this.doubleTapDragging = true;
-        this.serviceManager.sendButton("left", "down");
-        navigator.vibrate?.(30);
-        return;
+      // LOGIC: Check if we are waiting for a sequence
+      if (clickTimer) {
+        // This is Tap 2, 3, etc.
+        clearTimeout(clickTimer);
+        clickTimer = null;
+        tapCount++;
+      } else {
+        // This is a fresh Tap 1
+        tapCount = 1;
       }
 
+      // START HOLD TIMER
       holdTimer = setTimeout(() => {
-        if (!this.dragging && !this.doubleTapDragging) {
+        if (isDragging) return;
+
+        if (tapCount === 1) {
+          // Tap 1 Hold -> Right Click
           this.serviceManager.sendButton("right", "click");
           navigator.vibrate?.(50);
-          this.waitingForSecondTap = false;
-          clearTimeout(singleTapTimer);
+          rightClickDone = true;
+        } else {
+          // Tap 2+ Hold -> Start Drag (Left Down)
+          if (!dragActive) {
+            this.serviceManager.sendButton("left", "down");
+            dragActive = true;
+            navigator.vibrate?.(30);
+          }
         }
-      }, this.HOLD_THRESHOLD);
+      }, this.HOLD_TIME);
     };
 
     const moveTouch = (e) => {
@@ -87,14 +102,24 @@ export class TouchpadHandler {
       const dx = touch.clientX - lastX;
       const dy = touch.clientY - lastY;
 
-      if (!this.dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-        clearTimeout(holdTimer);
-        this.dragging = true;
-        this.waitingForSecondTap = false;
-        clearTimeout(singleTapTimer);
+      // Noise filter
+      if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        isDragging = true;
+        
+        // If we move, cancel the Right Click timer
+        if (tapCount === 1) {
+            clearTimeout(holdTimer); 
+        }
+        
+        // If Tap 2+ moves -> Immediate Drag Start (Left Down)
+        if (tapCount > 1 && !dragActive) {
+            clearTimeout(holdTimer); // Cancel hold wait, start immediately
+            this.serviceManager.sendButton("left", "down");
+            dragActive = true;
+        }
       }
 
-      if (this.dragging || this.doubleTapDragging) {
+      if (isDragging) {
         lastX = touch.clientX;
         lastY = touch.clientY;
         this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
@@ -105,45 +130,41 @@ export class TouchpadHandler {
       e.preventDefault();
       clearTimeout(holdTimer);
 
-      const touchDuration = Date.now() - touchStartTime;
-      const timeSinceLastTap = Date.now() - lastTapTime;
-
-      if (this.doubleTapDragging) {
+      // CASE A: Drag Active (Tap 2+ was held/dragged)
+      if (dragActive) {
         this.serviceManager.sendButton("left", "up");
-        this.doubleTapDragging = false;
-        this.dragging = false;
+        dragActive = false;
+        tapCount = 0; // Reset sequence
         return;
       }
 
-      if (!this.dragging && touchDuration < this.TAP_THRESHOLD) {
-        const now = Date.now();
-        
-        if (this.waitingForSecondTap && timeSinceLastTap < this.DOUBLE_TAP_THRESHOLD) {
-          clearTimeout(singleTapTimer);
-          this.waitingForSecondTap = false;
-          
-          this.serviceManager.sendButton("left", "click");
-          setTimeout(() => {
-            this.serviceManager.sendButton("left", "click");
-          }, this.DOUBLE_CLICK_DELAY);
-          
-          navigator.vibrate?.(40);
-          lastTapTime = 0;
-        } else {
-          lastTapTime = now;
-          this.waitingForSecondTap = true;
-          
-          singleTapTimer = setTimeout(() => {
-            if (this.waitingForSecondTap) {
-              this.serviceManager.sendButton("left", "click");
-              navigator.vibrate?.(20);
-              this.waitingForSecondTap = false;
-            }
-          }, this.DOUBLE_TAP_THRESHOLD);
-        }
+      // CASE B: Right Click (Tap 1 was held)
+      if (rightClickDone) {
+        tapCount = 0; // Reset sequence
+        return;
       }
 
-      this.dragging = false;
+      // CASE C: Cursor Move (Tap 1 moved)
+      if (tapCount === 1 && isDragging) {
+        tapCount = 0; // Reset sequence, don't click
+        return;
+      }
+
+      // CASE D: Quick Tap Release (Tap 1, 2, 3...)
+      // We start the "Wait" timer to see if another tap comes
+      clickTimer = setTimeout(() => {
+        // Timer Expired -> Execute Clicks
+        for (let i = 0; i < tapCount; i++) {
+            // Add tiny delay between multi-clicks so OS registers them
+            setTimeout(() => {
+                this.serviceManager.sendButton("left", "click");
+            }, i * 50); 
+        }
+        
+        // Reset state
+        tapCount = 0;
+        clickTimer = null;
+      }, this.CLICK_DELAY);
     };
 
     pad.addEventListener("touchstart", startTouch, { passive: false });
@@ -166,17 +187,15 @@ export class TouchpadHandler {
     const moveScroll = (e) => {
       if (!scrolling) return;
       e.preventDefault();
-
       const currentY = e.touches[0].clientY;
       const delta = lastY - currentY;
       lastY = currentY;
-
       accumulatedScroll += delta;
 
-      const scrollAmount = Math.floor(accumulatedScroll * 3);
+      const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
       if (Math.abs(scrollAmount) >= 1) {
         this.serviceManager.sendTouchpadScroll(scrollAmount);
-        accumulatedScroll -= scrollAmount / 3;
+        accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
       }
     };
 

@@ -1,7 +1,6 @@
 Home assistant app
 
 - remember the config of absolute gyro would be nice
-- backspace in live input does write the last typed keys
 
 Home assistant mobile Firefox
 

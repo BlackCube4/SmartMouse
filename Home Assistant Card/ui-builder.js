@@ -1,45 +1,91 @@
+/**
+ * UIBuilder Class
+ * ----------------
+ * Responsible for constructing the DOM elements for the custom card.
+ * It handles CSS styling (using Home Assistant variables), layout structure,
+ * and binding event listeners to the ServiceManager and GyroHandler.
+ */
 export class UIBuilder {
   constructor(config) {
     this.config = config;
   }
 
+  /**
+   * Creates the main container for the card.
+   * Applies standard Home Assistant card styling (backgrounds, borders, shadows)
+   * to ensure it blends in with the dashboard theme.
+   */
   createRoot() {
     const root = document.createElement("div");
     Object.assign(root.style, {
-      background: "#1e1f22",
-      borderRadius: "14px",
-      border: "1px solid #2b2c2f",
-      color: "#fff",
+      background: "var(--ha-card-background, var(--card-background-color, #1e1f22))",
+      borderRadius: "var(--ha-card-border-radius, 14px)",
+      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
+      color: "var(--primary-text-color, #fff)",
       userSelect: "none",
       padding: "10px",
-      fontFamily: "Inter, sans-serif",
+      fontFamily: "var(--paper-font-body1_-_font-family, Inter, sans-serif)",
       boxSizing: "border-box",
+      boxShadow: "var(--ha-card-box-shadow)"
     });
     return root;
   }
 
-  createButton(text, handler, fontSize = "13px") {
+  //Button
+  /**
+   * specific button creator that handles both Text and MDI Icons.
+   * @param {string} textOrIcon - Display text OR an icon string starting with "mdi:"
+   * @param {function} handler - Click event handler
+   * @param {string} fontSize - CSS font size (controls text size)
+   */
+  createButton(textOrIcon, handler, fontSize = "14px") {
     const btn = document.createElement("button");
-    btn.textContent = text;
 
     Object.assign(btn.style, {
+      // Layout
+      display: "flex",              // distinct center alignment for icons vs text
+      alignItems: "center",
+      justifyContent: "center",
       padding: "10px 6px",
-      borderRadius: "10px",
-      background: "#2b2c2f",
-      color: "#fff",
-      border: "1px solid #323337",
+      
+      // Visuals
+      borderRadius: "var(--ha-card-border-radius, 10px)",
+      background: "var(--dark, #2b2c2f)",
+      color: "var(--primary-text-color, #fff)",
+      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
       fontSize: fontSize,
       cursor: "pointer",
       transition: "background 0.15s",
-      touchAction: "manipulation", 
+      
+      // --- FIXES (Selection & Highlights) ---
+      outline: "none",                        // No desktop blue focus ring
+      webkitTapHighlightColor: "transparent", // No mobile tap highlight box
+      userSelect: "none",                     // No text selection
+      touchAction: "manipulation",            // Improves touch response
+      overflow: "hidden"                      // Clips content to rounded corners
     });
 
-    btn.addEventListener("pointerdown", () => {
-      btn.style.background = "#3a3b3f";
-    });
-    btn.addEventListener("pointerup", () => {
-      btn.style.background = "#2b2c2f";
-    });
+    // --- ICON SIZE FIX ---
+    // User requested fixed 18px size for icons, independent of text fontSize
+    btn.style.setProperty("--mdc-icon-size", "18px");
+
+    // --- ICON LOGIC ---
+    if (textOrIcon.startsWith("mdi:")) {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", textOrIcon);
+      // Ensure the icon doesn't intercept pointer events intended for the button
+      icon.style.pointerEvents = "none"; 
+      btn.appendChild(icon);
+    } else {
+      btn.textContent = textOrIcon;
+    }
+
+    // Interaction Styles
+    const setBg = (color) => { btn.style.background = color; };
+    
+    btn.addEventListener("pointerdown", () => setBg("var(--light, #3a3b3f)"));
+    btn.addEventListener("pointerup", () => setBg("var(--dark, #2b2c2f)"));
+    btn.addEventListener("pointerleave", () => setBg("var(--dark, #2b2c2f)")); // Safety release
 
     if (handler) btn.addEventListener("click", handler);
     return btn;
@@ -52,7 +98,6 @@ export class UIBuilder {
       alignItems: "center",
       justifyContent: "center",
       cursor: "crosshair",
-      background: "#1b1c1f",
     });
 
     const overlay = document.createElement("div");
@@ -82,13 +127,13 @@ export class UIBuilder {
     root.addEventListener("mouseenter", () => {
       isActive = true;
       overlay.textContent = "Controlling (ESC to release)";
-      root.style.background = "#232427";
+      root.style.background = "var(--dark, #232427)";
     });
 
     root.addEventListener("mouseleave", () => {
       isActive = false;
       overlay.textContent = "Hover to control";
-      root.style.background = "#1b1c1f";
+      root.style.background = "var(--ha-card-background, var(--card-background-color, #1e1f22))";
     });
 
     root.addEventListener("mousemove", handleMouseMove);
@@ -128,7 +173,13 @@ export class UIBuilder {
 
     const updateLayout = () => {
       expandedArea.style.display = expanded ? "flex" : "none";
-      expandBtn.textContent = expanded ? "▼" : "▲"; 
+      
+      // FIX: Manually update icon by creating a new element.
+      expandBtn.innerHTML = "";
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", expanded ? "mdi:chevron-down" : "mdi:chevron-up"); //▼▲
+      icon.style.pointerEvents = "none";
+      expandBtn.appendChild(icon);
     };
 
     Object.assign(root.style, {
@@ -142,14 +193,15 @@ export class UIBuilder {
       display: "flex",
       height: "220px",
       width: "100%",
-      borderRadius: "10px",
+      borderRadius: "var(--ha-card-border-radius, 10px)",
       overflow: "hidden",
+      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
     });
 
     const pad = document.createElement("div");
     Object.assign(pad.style, {
       flex: "1",
-      background: "#2a2b2e",
+      background: "var(--dark, #2a2b2e)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -161,13 +213,13 @@ export class UIBuilder {
     const divider = document.createElement("div");
     Object.assign(divider.style, {
       width: "1px",
-      background: "#3a3b3d",
+      background: "var(--divider-color, #3a3b3d)",
     });
 
     const scrollArea = document.createElement("div");
     Object.assign(scrollArea.style, {
       width: "56px",
-      background: "#2a2b2e",
+      background: "var(--dark, #2a2b2e)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -191,18 +243,41 @@ export class UIBuilder {
       marginTop: "10px",
     });
 
-    const expandBtn = this.createButton("▲");
-    const gyroRelBtn = this.createButton("↝", () => gyroHandler.toggleGyroRelative());
-    const gyroAbsBtn = this.createButton("☉", () => gyroHandler.toggleGyroAbsolute());
-    const calibrateBtn = this.createButton("⛶");
-    const volDownBtn = this.createButton("-");
-    const volUpBtn = this.createButton("+");
+    const expandBtn = this.createButton("mdi:chevron-up"); //▲
+    
+    const gyroRelBtn = this.createButton("mdi:ray-start-arrow", () => { //↝
+        gyroHandler.toggleGyroRelative().then(() => {
+            if (gyroHandler.gyroRelativeActive) {
+                gyroRelBtn.style.background = "var(--primary-color, #666)";
+                gyroRelBtn.style.color = "var(--text-primary-color, #fff)";
+            } else {
+                gyroRelBtn.style.background = "var(--dark, #2b2c2f)";
+                gyroRelBtn.style.color = "var(--primary-text-color, #fff)";
+            }
+        });
+    });
+    
+    const gyroAbsBtn = this.createButton("mdi:bullseye", () => { //☉
+        gyroHandler.toggleGyroAbsolute().then(() => {
+            if (gyroHandler.gyroAbsoluteActive) {
+                gyroAbsBtn.style.background = "var(--primary-color, #666)";
+                gyroAbsBtn.style.color = "var(--text-primary-color, #fff)";
+            } else {
+                gyroAbsBtn.style.background = "var(--dark, #2b2c2f)";
+                gyroAbsBtn.style.color = "var(--primary-text-color, #fff)";
+            }
+        });
+    });
+
+    const calibrateBtn = this.createButton("mdi:border-radius"); //⛶
+    const volDownBtn = this.createButton("mdi:volume-minus"); //-
+    const volUpBtn = this.createButton("mdi:volume-plus"); //+
 
     gyroHandler.gyroRelBtn = gyroRelBtn;
     gyroHandler.gyroAbsBtn = gyroAbsBtn;
 
     if (gyroHandler.isCalibrated) {
-         calibrateBtn.style.background = "#2b2c2f";
+      calibrateBtn.style.background = "var(--dark, #2b2c2f)";
     }
 
     const volHandler = (btn, code) => {
@@ -242,10 +317,6 @@ export class UIBuilder {
 
     calibrateBtn.addEventListener("click", () => {
       if (gyroHandler.calibrating) return gyroHandler.finishCalibration();
-      if (gyroHandler.isCalibrated) {
-        gyroHandler.startCalibration(calibrateBtn);
-        return;
-      }
       gyroHandler.startCalibration(calibrateBtn);
     });
 
@@ -264,61 +335,123 @@ export class UIBuilder {
       width: "15%",
     });
 
+    const ANCHOR = " "; 
+    
+    // We track the last known value to detect diffs
+    this.lastInputValue = ANCHOR;
+
     const liveInput = document.createElement("input");
-    // WICHTIG: type="password" verhindert Wortvorhersagen und Composition Buffers auf Android.
-    // Das löst das "HalloHallHal"-Problem.
     liveInput.type = "password"; 
     liveInput.autocomplete = "off";
     liveInput.autocorrect = "off";
     liveInput.autocapitalize = "off";
     liveInput.spellcheck = false;
+    liveInput.value = ANCHOR;
 
     Object.assign(liveInput.style, {
       width: "100%",
       padding: "10px",
-      borderRadius: "10px",
-      background: "#2a2b2e",
-      border: "1px solid #323337",
+      borderRadius: "var(--ha-card-border-radius, 10px)",
+      background: "var(--dark, #2a2b2e)",
+      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
       color: "transparent", 
-      // caretColor entfernt
       fontSize: "14px",
       position: "relative",
       paddingInline: "0",
       textAlign: "center"
     });
 
-    const liveInputOverlay = document.createElement("div");
-    liveInputOverlay.textContent = "⌨";
+    const liveInputOverlay = document.createElement("div"); //⌨
     Object.assign(liveInputOverlay.style, {
       position: "absolute",
       top: "50%",
       left: "50%",
       transform: "translate(-50%, -50%)",
       pointerEvents: "none",
-      fontSize: "14px",
       zIndex: "1",
+      color: "var(--primary-text-color, #fff)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
     });
+    
+    const kbIcon = document.createElement("ha-icon");
+    kbIcon.setAttribute("icon", "mdi:keyboard");
+    kbIcon.style.setProperty("--mdc-icon-size", "18px"); // Match buttons
+    liveInputOverlay.appendChild(kbIcon);
 
     liveWrapper.appendChild(liveInput);
     liveWrapper.appendChild(liveInputOverlay);
 
-    // --- LIVE INPUT LOGIC (UPDATED) ---
-    liveInput.addEventListener("beforeinput", (e) => {
-      e.preventDefault(); 
+    // --- LIVE INPUT LOGIC (ROBUST DELTA) ---
+    const ensureCursorAtEnd = () => {
+      try {
+        const len = liveInput.value.length;
+        liveInput.setSelectionRange(len, len);
+      } catch(e){}
+    };
 
-      if (e.inputType === "deleteContentBackward") {
-        touchpadHandler.serviceManager.sendKey(42, "send");
-      } 
-      else if (e.data) {
-        touchpadHandler.serviceManager.sendText(e.data);
+    liveInput.addEventListener("focus", ensureCursorAtEnd);
+    liveInput.addEventListener("click", ensureCursorAtEnd);
+    liveInput.addEventListener("touchend", ensureCursorAtEnd);
+
+    liveInput.addEventListener("input", (e) => {
+      const val = liveInput.value;
+      const prev = this.lastInputValue;
+      
+      // Calculate pure length difference
+      const diff = val.length - prev.length;
+      
+      // 1. Handle Reset (User or Code cleared it)
+      if (val.length < ANCHOR.length) {
+         touchpadHandler.serviceManager.sendKey(42, "send"); // Backspace
+         // Async reset to prevent fighting
+         setTimeout(() => {
+             liveInput.value = ANCHOR;
+             this.lastInputValue = ANCHOR;
+             ensureCursorAtEnd();
+         }, 0);
+         return;
       }
-      liveInput.value = "";
+
+      // 2. Handle Sending Logic based on diff
+      if (diff > 0) {
+          // Added characters (Typing)
+          const added = val.slice(prev.length);
+          if (added) {
+            touchpadHandler.serviceManager.sendText(added);
+          }
+      } else if (diff < 0) {
+          // Removed characters (Backspace)
+          const absDiff = Math.abs(diff);
+          for(let i=0; i<absDiff; i++) {
+            touchpadHandler.serviceManager.sendKey(42, "send");
+          }
+      }
+
+      // 3. Update History Optimistically
+      this.lastInputValue = val;
+
+      // 4. Anchor Maintenance (The Fix)
+      // If text is getting too long...
+      if (val.length > 30) {
+          setTimeout(() => {
+              liveInput.value = ANCHOR;
+              this.lastInputValue = ANCHOR;
+              ensureCursorAtEnd();
+          }, 0);
+      }
+    });
+    
+    // Clear buffer on blur
+    liveInput.addEventListener("blur", () => {
+        liveInput.value = ANCHOR;
+        this.lastInputValue = ANCHOR;
     });
 
-    // Fallback für spezielle Tasten
     liveInput.addEventListener("keydown", (e) => {
       const specialKeys = ["Enter", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", 
-                          "Home", "End", "PageUp", "PageDown", "Delete", "Tab"];
+                            "Home", "End", "PageUp", "PageDown", "Delete", "Tab"];
       
       if (specialKeys.includes(e.key)) {
         e.preventDefault();
@@ -327,12 +460,6 @@ export class UIBuilder {
           touchpadHandler.serviceManager.sendKey(code, "send");
         }
       }
-      setTimeout(() => { liveInput.value = ""; }, 0);
-    });
-
-    // Zusätzliche Sicherheit gegen Ghosting
-    liveInput.addEventListener("input", (e) => {
-        liveInput.value = "";
     });
 
     // --- STANDARD TEXT INPUT ---
@@ -342,24 +469,23 @@ export class UIBuilder {
     Object.assign(textInput.style, {
       flex: "1",
       padding: "10px",
-      borderRadius: "10px",
-      background: "#2a2b2e",
-      border: "1px solid #323337",
-      color: "#fff",
+      borderRadius: "var(--ha-card-border-radius, 10px)",
+      background: "var(--dark, #2a2b2e)",
+      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
+      color: "var(--primary-text-color, #fff)",
       fontSize: "14px",
     });
 
     textInput.addEventListener("keydown", (e) => e.stopPropagation());
     textInput.addEventListener("keyup", (e) => e.stopPropagation());
 
-    // --- SEND BUTTON (UPDATED) ---
-    const sendTextBtn = this.createButton("→", () => {
+    // --- SEND BUTTON ---
+    const sendTextBtn = this.createButton("mdi:arrow-right-thin", () => { //→
       const text = textInput.value;
       if (text) {
         touchpadHandler.serviceManager.sendText(text);
         textInput.value = "";
       } else {
-        // Leere Box = Enter
         touchpadHandler.serviceManager.sendKey(40, "send");
       }
     });
@@ -388,19 +514,52 @@ export class UIBuilder {
       const b = this.createButton(label, () => {
         const key = label.toLowerCase();
         modifierState[key] = !modifierState[key];
-        b.style.background = modifierState[key] ? "#3a3b3f" : "#2b2c2f";
+        
+        if (modifierState[key]) {
+            b.style.background = "var(--primary-color, #3a3b3f)";
+            b.style.color = "var(--text-primary-color, #fff)";
+        } else {
+            b.style.background = "var(--dark, #2b2c2f)";
+            b.style.color = "var(--primary-text-color, #fff)";
+        }
+        
         touchpadHandler.serviceManager.sendKey(code, modifierState[key] ? "press" : "release");
-      });
+      }, "14px");
       modifierRow.appendChild(b);
     });
 
     const escBtn = this.createButton("ESC", () => {
       touchpadHandler.serviceManager.sendKey(41, "send");
       navigator.vibrate?.(30);
-    });
+    }, "14px");
     modifierRow.appendChild(escBtn);
 
     expandedArea.appendChild(modifierRow);
+
+    // --- DEBUG DISPLAY (CONDITIONAL) ---
+    // Only created if config.debug is true
+    if (this.config.debug) {
+        const debugRow = document.createElement("div");
+        Object.assign(debugRow.style, {
+            marginTop: "10px",
+            padding: "8px",
+            background: "#00000044",
+            borderRadius: "4px",
+            fontFamily: "monospace",
+            fontSize: "11px",     // Slightly larger
+            lineHeight: "1.4",    // Better readability
+            color: "#aaa",
+            whiteSpace: "pre-wrap" // Allow wrapping/newlines
+        });
+        debugRow.textContent = "Waiting for sensor data...";
+        
+        // Connect to Gyro Handler
+        gyroHandler.debugElem = debugRow; 
+        
+        expandedArea.appendChild(debugRow);
+    }
+    // ---------------------
+
     root.appendChild(expandedArea);
 
     touchpadHandler.setupPad(pad);
