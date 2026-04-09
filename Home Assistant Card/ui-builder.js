@@ -95,77 +95,149 @@ export class UIBuilder {
     Object.assign(root.style, {
       height: "400px",
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      cursor: "crosshair",
+      cursor: "pointer",
+      position: "relative",
+      backgroundColor: "var(--ha-card-background, #1e1f22)",
+      transition: "background 0.3s",
+      overflow: "hidden" // Keep everything contained
     });
+
+    const decoyInput = document.createElement("input");
+    decoyInput.type = "text";
+    Object.assign(decoyInput.style, { position: "absolute", opacity: 0, pointerEvents: "none", zIndex: -1 });
+    root.appendChild(decoyInput);
 
     const overlay = document.createElement("div");
-    overlay.textContent = "Hover to control";
-    Object.assign(overlay.style, {
-      width: "100%",
-      height: "100%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px",
-      opacity: "0.5",
-    });
+    overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Ctrl + Alt + Shift + Space</small>";
+    Object.assign(overlay.style, { textAlign: "center", pointerEvents: "none", userSelect: "none" });
     root.appendChild(overlay);
 
-    let isActive = false;
+    let isLocked = false;
+    let forceQuit = false;
 
-    const handleMouseMove = (e) => {
-      if (!isActive) return;
-      const dx = e.movementX;
-      const dy = e.movementY;
-      if (dx || dy) serviceManager.sendMove(dx, dy);
+    // --- KEYBOARD & ESC BLOCKING ---
+    const handleKey = (e, mode) => {
+      if (!isLocked) return;
+      
+      // Updated Exit Sequence: Ctrl + Alt + Shift + Space
+      if (e.ctrlKey && e.altKey && e.shiftKey && e.code === 'Space') {
+        forceQuit = true;
+        document.exitPointerLock();
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      if (mode === "press" && e.repeat) return;
+
+      let hidCode = this.getHIDKeycode(e.key, e.code);
+      
+      // Check for the '´' key to act as Windows/Meta key (HID 227)
+      if (e.key === "´") {
+        hidCode = 227;
+      }
+
+      if (!hidCode && e.code.startsWith('Key')) hidCode = e.code.charCodeAt(3) - 65 + 4;
+      if (!hidCode && e.code.startsWith('Digit')) {
+        const d = parseInt(e.code.slice(-1));
+        hidCode = d === 0 ? 39 : d + 29;
+      }
+
+      const symbolMap = {
+        Space: 44, Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48,
+        Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, 
+        Period: 55, Slash: 56, CapsLock: 57, Tab: 43, Escape: 41
+      };
+      if (!hidCode) hidCode = symbolMap[e.code];
+
+      const modMap = { 
+        ControlLeft: 224, ShiftLeft: 225, AltLeft: 226, MetaLeft: 227, 
+        ControlRight: 228, ShiftRight: 229, AltRight: 230 
+      };
+      if (!hidCode) hidCode = modMap[e.code];
+
+      if (hidCode) serviceManager.sendKey(hidCode, mode);
     };
 
-    const btnMap = { 0: "left", 1: "middle", 2: "right" };
+    const onKeyDown = (e) => handleKey(e, "press");
+    const onKeyUp = (e) => handleKey(e, "release");
+    
+    // --- MOUSE BINDING ---
+    const onMove = (e) => {
+      if (isLocked && document.pointerLockElement) {
+        serviceManager.sendMove(e.movementX || 0, e.movementY || 0);
+      }
+    };
 
-    root.addEventListener("mouseenter", () => {
-      isActive = true;
-      overlay.textContent = "Controlling (ESC to release)";
-      root.style.background = "var(--dark, #232427)";
-    });
+    const blockScroll = (e) => { if (isLocked) e.preventDefault(); };
 
-    root.addEventListener("mouseleave", () => {
-      isActive = false;
-      overlay.textContent = "Hover to control";
-      root.style.background = "var(--ha-card-background, var(--card-background-color, #1e1f22))";
-    });
+    // --- LOCK STATE MANAGEMENT ---
+    const syncLockState = () => {
+      if (document.pointerLockElement === root || document.pointerLockElement !== null) {
+        isLocked = true;
+        forceQuit = false;
+        overlay.textContent = "System Locked. Ctrl+Alt+Shift+Space to Exit";
+        root.style.background = "var(--dark, #232427)";
+        root.style.cursor = "none";
+        decoyInput.focus();
+        
+        window.addEventListener("keydown", onKeyDown, true);
+        window.addEventListener("keyup", onKeyUp, true);
+        window.addEventListener("wheel", blockScroll, { passive: false });
+        document.addEventListener("mousemove", onMove, { capture: true });
+      } else {
+        if (!forceQuit) {
+          root.requestPointerLock();
+          return;
+        }
 
-    root.addEventListener("mousemove", handleMouseMove);
+        isLocked = false;
+        overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Ctrl + Alt + Shift + Space</small>";
+        root.style.background = "var(--ha-card-background, #1e1f22)";
+        root.style.cursor = "pointer";
+        decoyInput.blur();
+        
+        window.removeEventListener("keydown", onKeyDown, true);
+        window.removeEventListener("keyup", onKeyUp, true);
+        window.removeEventListener("wheel", blockScroll);
+        document.removeEventListener("mousemove", onMove, { capture: true });
+      }
+    };
+
+    document.addEventListener("pointerlockchange", syncLockState);
+
     root.addEventListener("mousedown", (e) => {
-      if (!isActive) return;
-      e.preventDefault();
-      serviceManager.sendButton(btnMap[e.button] || "left", "down");
+      if (!isLocked) {
+        root.requestPointerLock();
+        e.preventDefault();
+      } else {
+        const btnMap = { 0: "left", 1: "middle", 2: "right" };
+        serviceManager.sendButton(btnMap[e.button] || "left", "down");
+        e.preventDefault();
+      }
     });
+
     root.addEventListener("mouseup", (e) => {
-      if (!isActive) return;
-      e.preventDefault();
-      serviceManager.sendButton(btnMap[e.button] || "left", "up");
+      if (isLocked) {
+        const btnMap = { 0: "left", 1: "middle", 2: "right" };
+        serviceManager.sendButton(btnMap[e.button] || "left", "up");
+        e.preventDefault();
+      }
     });
+
     root.addEventListener("wheel", (e) => {
-      if (!isActive) return;
-      e.preventDefault();
-      serviceManager.sendScrollWheel(Math.sign(e.deltaY) * -1);
+      if (isLocked) {
+        e.preventDefault();
+        serviceManager.sendScrollWheel(Math.sign(e.deltaY) * -1);
+      }
     }, { passive: false });
 
-    root.tabIndex = 0;
-    root.addEventListener("keydown", (e) => {
-      if (!isActive) return;
-      e.preventDefault();
-      const key = this.getHIDKeycode(e.key, e.code);
-      if (key) serviceManager.sendKey(key, "press");
-    });
-    root.addEventListener("keyup", (e) => {
-      if (!isActive) return;
-      e.preventDefault();
-      const key = this.getHIDKeycode(e.key, e.code);
-      if (key) serviceManager.sendKey(key, "release");
-    });
+    root.addEventListener("contextmenu", (e) => { if (isLocked) e.preventDefault(); });
   }
 
   setupMobileLayout(root, touchpadHandler, gyroHandler) {
