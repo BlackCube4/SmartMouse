@@ -21,9 +21,13 @@ When using the custom card, you can tune the following parameters in the card's 
 ```yaml
 type: custom:esp-mouse-card
 device_id: <your_device_id>
-gyroSensitivity: 1.2
+mouseSensitivity: 4
+scrollSensitivity: 3
+gyroSensitivity: 8
 smoothing: 0.15
 suppression_offset: 30
+double_click_time: 300
+hold_time: 500
 debug: true
 ```
 

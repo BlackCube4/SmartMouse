@@ -269,7 +269,16 @@ export class UIBuilder {
         });
     });
 
-    const calibrateBtn = this.createButton("mdi:border-radius"); //⛶
+    const calibrateBtn = this.createButton("mdi:border-radius", () => {
+        if (gyroHandler.calibrating) {
+            gyroHandler.finishCalibration();
+        } else if (gyroHandler.gyroAbsoluteActive) {
+            // Quick Recenter if absolute is active
+            gyroHandler.recenter();
+        } else {
+            gyroHandler.startCalibration(calibrateBtn);
+        }
+    }); 
     const volDownBtn = this.createButton("mdi:volume-minus"); //-
     const volUpBtn = this.createButton("mdi:volume-plus"); //+
 
@@ -313,11 +322,6 @@ export class UIBuilder {
     expandBtn.addEventListener("click", () => {
       expanded = !expanded;
       updateLayout();
-    });
-
-    calibrateBtn.addEventListener("click", () => {
-      if (gyroHandler.calibrating) return gyroHandler.finishCalibration();
-      gyroHandler.startCalibration(calibrateBtn);
     });
 
     // TEXT INPUT + SEND -------------------------------------------------------

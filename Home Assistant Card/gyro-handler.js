@@ -14,12 +14,21 @@ export class GyroHandler {
     this.gyroRelativeActive = false;
     this.gyroAbsoluteActive = false;
     this.isCalibrated = false;
+    this.calibrationStartTime = 0;
+    this.calibrationDuration = 3000; // 3 seconds
     this.calibrating = false;
 
     // --- DATA HOLDERS ---
     this.orientation = { x: 0, y: 0, z: 0 }; // Yaw, Pitch, Roll (Degrees)
     this.lastOrientation = { x: null, y: null, z: null };
     
+    // Calibration Bounds (Yaw/X and Pitch/Y)
+    this.originalCalibrateBtnIcon = ""; // To store the icon during calibration
+    this.bounds = {
+      minX: 0, maxX: 0,
+      minY: 0, maxY: 0
+    };
+
     this.smoothX = 0;
     this.smoothY = 0;
     this.smoothZ = 0;
@@ -45,6 +54,7 @@ export class GyroHandler {
 
     // Calculation Loop: Runs at 100Hz (every 10ms) to ensure smooth calculation and fast sending
     this.updateInterval = setInterval(() => this.processLoop(), 10);
+    this.loadCalibration();
 
     // Debug: Always attempt to listen if debug mode is on
     if (this.config.debug) {
@@ -53,12 +63,17 @@ export class GyroHandler {
   }
 
   processLoop() {
-    if (!this.gyroRelativeActive) return;
+    if (!this.gyroRelativeActive && !this.gyroAbsoluteActive) return;
 
     // 1. Suppression Check
     if (performance.now() < this.suppressionEndTime) {
       this.lastOrientation.x = this.orientation.x;
       this.lastOrientation.y = this.orientation.y;
+      return;
+    }
+
+    if (this.gyroAbsoluteActive) {
+      this.processAbsolute();
       return;
     }
 
@@ -93,6 +108,87 @@ export class GyroHandler {
     if (Math.abs(moveX) > 0.01 || Math.abs(moveY) > 0.01) {
       this.serviceManager.sendMove(Math.round(moveX * 10), Math.round(moveY * 10)); 
     }
+  }
+
+  processAbsolute() {
+    if (!this.isCalibrated || this.calibrating) return;
+
+    const targetMax = 32767;
+
+    // Map Yaw (X) - Circular
+    const absX = this.mapCircular(this.orientation.x, this.bounds.minX, this.bounds.maxX, targetMax);
+    // Map Pitch (Y) - Linear
+    const absY = this.mapLinear(this.orientation.y, this.bounds.minY, this.bounds.maxY, targetMax);
+
+    // Invert for user's desired direction (up/down -> down/up, left/right -> right/left)
+    const invertedAbsX = targetMax - absX;
+    const invertedAbsY = targetMax - absY;
+
+    // Smoothing for absolute
+    this.smoothX = (this.smoothX * 0.7) + (invertedAbsX * 0.3);
+    this.smoothY = (this.smoothY * 0.7) + (invertedAbsY * 0.3);
+
+    this.serviceManager.sendMoveAbsolute(Math.round(this.smoothX), Math.round(this.smoothY));
+  }
+
+  // Helper for linear mapping (e.g., Pitch/Y)
+  mapLinear(val, min, max, targetMax) {
+    if (max === min) return targetMax / 2; // Avoid division by zero
+
+    // Clamp the input value directly to the calibrated range
+    const clampedVal = Math.max(min, Math.min(max, val));
+
+    // Calculate the ratio within the clamped range
+    const ratio = (clampedVal - min) / (max - min);
+
+    // Scale to target range
+    return Math.round(ratio * targetMax);
+  }
+
+  /**
+   * Unified circular mapping logic.
+   * Handles the 0/360 wrap-around by calculating distances relative to the left bound (min).
+   */
+  mapCircular(val, minBound, maxBound, targetMax) {
+    const v = (val % 360 + 360) % 360;
+    const min = (minBound % 360 + 360) % 360;
+    const max = (maxBound % 360 + 360) % 360;
+
+    // Total angular width of the calibrated window
+    const arcLength = (max - min + 360) % 360;
+    if (arcLength <= 0.1) return targetMax / 2;
+
+    // Current position relative to the start of the window
+    const relativeVal = (v - min + 360) % 360;
+
+    if (relativeVal <= arcLength) {
+      // We are inside the pointed area
+      return Math.round((relativeVal / arcLength) * targetMax);
+    } else {
+      // We are in the "dead zone" behind the user - clamp to nearest edge
+      const distToMin = 360 - relativeVal;
+      const distToMax = relativeVal - arcLength;
+      return distToMin < distToMax ? 0 : targetMax;
+    }
+  }
+
+  recenter() {
+    if (!this.isCalibrated) return;
+    
+    // Calculate current width/height of the calibration window
+    const dx = (this.bounds.maxX - this.bounds.minX + 360) % 360;
+    const dy = this.bounds.maxY - this.bounds.minY;
+
+    // Shift bounds so current orientation is at center
+    this.bounds.minX = (this.orientation.x - dx / 2 + 360) % 360;
+    this.bounds.maxX = (this.orientation.x + dx / 2 + 360) % 360;
+    
+    this.bounds.minY = this.orientation.y - dy / 2;
+    this.bounds.maxY = this.orientation.y + dy / 2;
+
+    this.saveCalibration();
+    navigator.vibrate?.([30, 30]);
+    if (this.debugElem) this.updateDebug("Recentered");
   }
 
   setGyroSuppression(ms) {
@@ -183,7 +279,9 @@ export class GyroHandler {
     // Euler conversion
     const siny_cosp = 2 * (w * z + x * y);
     const cosy_cosp = 1 - 2 * (y * y + z * z);
-    const alpha = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI); 
+    let alpha = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI);
+    // Normalize to 0-360 for consistent calibration logic
+    alpha = (alpha + 360) % 360;
 
     const sinr_cosp = 2 * (w * x + y * z);
     const cosr_cosp = 1 - 2 * (x * x + y * y);
@@ -195,6 +293,11 @@ export class GyroHandler {
     else gamma = Math.asin(sinp) * (180 / Math.PI);
 
     this.orientation = { x: alpha, y: beta, z: gamma };
+    
+    if (this.calibrating) {
+      this.updateCalibrationBounds();
+    }
+
     this.updateDebug("Modern API");
   }
 
@@ -206,6 +309,11 @@ export class GyroHandler {
         y: event.beta || 0,
         z: event.gamma || 0
     };
+
+    if (this.calibrating) {
+      this.updateCalibrationBounds();
+    }
+
     this.updateDebug("Legacy API", event);
   }
 
@@ -230,7 +338,8 @@ export class GyroHandler {
         `X (Yaw):   ${this.orientation.x.toFixed(4)}\n` +
         `Y (Pitch): ${this.orientation.y.toFixed(4)}\n` +
         `Z (Roll):  ${this.orientation.z.toFixed(4)}\n` +
-        `Compass:   ${compassVal}`;
+        `Compass:   ${compassVal}\n` +
+        `Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}`;
   }
   
   // --- PLATZHALTER & PERMISSIONS ---
@@ -244,9 +353,28 @@ export class GyroHandler {
     const granted = await this.requestPermission();
     if (granted) {
       this.gyroRelativeActive = true;
+      // Reset smoothing and history to prevent coordinate pollution
+      this.smoothX = 0;
+      this.smoothY = 0;
       this.lastOrientation.x = null;
       // Start Listening muss hier erneut aufgerufen werden, falls der Debug-Modus vorher aus war
       this.startListening(); 
+    }
+  }
+
+  async toggleGyroAbsolute() {
+    if (this.gyroAbsoluteActive) {
+      this.gyroAbsoluteActive = false;
+      this.stopListening();
+      return;
+    }
+    const granted = await this.requestPermission();
+    if (granted) {
+      this.gyroAbsoluteActive = true;
+      // Reset smoothing to start from a clean state
+      this.smoothX = 0;
+      this.smoothY = 0;
+      this.startListening();
     }
   }
   
@@ -259,8 +387,88 @@ export class GyroHandler {
     // Andere Browser/OS
     return true;
   }
-  
-  async toggleGyroAbsolute() { console.warn("Not implemented"); }
-  startCalibration() {}
-  finishCalibration() {}
+
+  saveCalibration() {
+    localStorage.setItem('esp_mouse_gyro_bounds', JSON.stringify(this.bounds));
+    this.isCalibrated = true;
+  }
+
+  loadCalibration() {
+    const stored = localStorage.getItem('esp_mouse_gyro_bounds');
+    if (stored) {
+      this.bounds = JSON.parse(stored);
+      this.isCalibrated = true;
+    }
+  }
+
+  startCalibration(btn) {
+    this.calibrating = true;
+    this.isCalibrated = false;
+    this.calibrateBtnElem = btn;
+
+    // Store original icon and update button text for progress
+    this.originalCalibrateBtnIcon = btn.querySelector('ha-icon')?.getAttribute('icon') || "";
+    btn.innerHTML = "0%";
+    
+    // Initialize bounds with current orientation
+    this.bounds.minX = this.orientation.x;
+    this.bounds.maxX = this.orientation.x;
+    this.bounds.minY = this.orientation.y;
+    this.bounds.maxY = this.orientation.y;
+
+    btn.style.background = "var(--error-color, #e74c3c)";
+    this.calibrationStartTime = performance.now();
+    // Auto-stop after 3 seconds
+    this.calTimer = setTimeout(() => this.finishCalibration(), 3000);
+    
+    if (this.debugElem) this.updateDebug("Calibrating...");
+  }
+
+  updateCalibrationBounds() {
+    // Update progress bar
+    const elapsed = performance.now() - this.calibrationStartTime;
+    const progress = Math.min(100, Math.floor((elapsed / this.calibrationDuration) * 100));
+    if (this.calibrateBtnElem) {
+      this.calibrateBtnElem.textContent = `${progress}%`;
+    }
+
+    // Yaw (X) handling with circular logic
+    const distToMin = Math.abs(this.orientation.x - this.bounds.minX);
+    const distToMax = Math.abs(this.orientation.x - this.bounds.maxX);
+    
+    // Simple min/max for pitch (usually doesn't flip 360)
+    this.bounds.minY = Math.min(this.bounds.minY, this.orientation.y);
+    this.bounds.maxY = Math.max(this.bounds.maxY, this.orientation.y);
+
+    // For Yaw, we just expand the range
+    let dMin = this.orientation.x - this.bounds.minX;
+    if (dMin > 180) dMin -= 360;
+    if (dMin < -180) dMin += 360;
+    if (dMin < 0) this.bounds.minX = this.orientation.x;
+
+    let dMax = this.orientation.x - this.bounds.maxX;
+    if (dMax > 180) dMax -= 360;
+    if (dMax < -180) dMax += 360;
+    if (dMax > 0) this.bounds.maxX = this.orientation.x;
+  }
+
+  finishCalibration() {
+    if (!this.calibrating) return;
+    clearTimeout(this.calTimer);
+    this.calibrating = false;
+    this.saveCalibration();
+    
+    if (this.calibrateBtnElem) {
+      this.calibrateBtnElem.style.background = "var(--dark, #2b2c2f)";
+      // Restore original icon
+      if (this.originalCalibrateBtnIcon) {
+        this.calibrateBtnElem.innerHTML = "";
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("icon", this.originalCalibrateBtnIcon);
+        icon.style.pointerEvents = "none";
+        this.calibrateBtnElem.appendChild(icon);
+      }
+    }
+    navigator.vibrate?.(100);
+  }
 }
