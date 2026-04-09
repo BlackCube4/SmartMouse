@@ -30,7 +30,7 @@ export class GyroHandler {
     this.measuredFrequency = 0.0;
 
     // --- CONFIGURATION ---
-    this.GAIN = config.gyroSensitivity ?? 1.0; 
+    this.GAIN = config.gyroSensitivity ?? 8.0; 
     this.SMOOTHING = config.smoothing ?? 0.2; 
     
     // Suppression: Extra wait time in ms after click release (Default: 20ms)

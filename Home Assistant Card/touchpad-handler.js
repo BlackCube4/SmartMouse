@@ -8,12 +8,12 @@ export class TouchpadHandler {
     this.floatDY = 0;
     
     // --- CONFIGURATION ---
-    this.TOUCH_GAIN = config.padSensitivity ?? config.touch_gain ?? 1.8;
+    this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
     this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
 
     // Timing (ms)
     // "Wait for second tap" timer
-    this.CLICK_DELAY = config.double_click_time ?? 250; 
+    this.CLICK_DELAY = config.double_click_time ?? 250;
     // Time to trigger Right Click (Tap 1) or Start Drag (Tap 2+)
     this.HOLD_TIME = config.hold_time ?? 500;           
     
