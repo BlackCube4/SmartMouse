@@ -3,9 +3,18 @@ import asyncio
 import struct
 import logging
 import websockets
+import voluptuous as vol
+import homeassistant.helpers.config_validation as cv
+from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.config_entries import ConfigEntry
 
-DOMAIN = "esp_mouse"
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
+
+# PRE-COMPILE STRUCTS for maximum speed. 
+# This avoids parsing the format string on every single mouse move.
+MOVE_PACKER = struct.Struct("<Bhh")
 
 # --- OPCODES DEFINITIONS (from S3_KeyMouseTest_4.ino) ---
 # Mouse/Pointer
@@ -37,15 +46,62 @@ MOUSE_RIGHT_BUTTON      = 0x02
 MOUSE_MIDDLE_BUTTON     = 0x04
 # -----------------------------------------------------------
 
+# --- SERVICE SCHEMAS ---
+SERVICE_MOVE_SCHEMA = vol.Schema({
+    vol.Required("x"): vol.Coerce(int),
+    vol.Required("y"): vol.Coerce(int),
+})
+
+SERVICE_MOVE_ABS_SCHEMA = vol.Schema({
+    vol.Required("x"): vol.All(vol.Coerce(int), vol.Range(min=0, max=32767)),
+    vol.Required("y"): vol.All(vol.Coerce(int), vol.Range(min=0, max=32767)),
+})
+
+SERVICE_BUTTON_SCHEMA = vol.Schema({
+    vol.Optional("button", default="left"): vol.In(["left", "right", "middle"]),
+    vol.Optional("mode", default="click"): vol.In(["click", "down", "up"]),
+})
+
+SERVICE_SCROLL_SCHEMA = vol.Schema({
+    vol.Required("delta"): vol.Coerce(int),
+})
+
+SERVICE_KEY_SCHEMA = vol.Schema({
+    vol.Required("keycode"): vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+    vol.Optional("mode", default="send"): vol.In(["press", "release", "send"]),
+})
+
+SERVICE_MEDIA_SCHEMA = vol.Schema({
+    vol.Required("code"): vol.All(vol.Coerce(int), vol.Range(min=0, max=0xFFFF)),
+    vol.Optional("mode", default="send"): vol.In(["press", "release", "send"]),
+})
+
+SERVICE_TEXT_SCHEMA = vol.Schema({
+    vol.Required("text"): cv.string,
+})
+
+SERVICE_MAP = {
+    "move": (OPCODE_MOUSE_RELATIVE, "<Bhh", ["x", "y"]),
+    "move_absolute": (OPCODE_MOUSE_ABSOLUTE, "<Bhh", ["x", "y"]),
+    "scroll_wheel": (OPCODE_SCROLL_WHEEL, "<Bh", ["delta"]),
+    "touchpad_scroll": (OPCODE_SCROLL_TOUCHPAD, "<Bh", ["delta"]),
+}
+# -----------------------
+
 
 async def async_setup(hass, config):
+    """Set up the ESP Mouse component from configuration.yaml (not used but required)."""
+    return True
+
+
+async def async_setup_entry(hass, entry: ConfigEntry):
     """Set up the ESP Mouse integration."""
-    host = config.get(DOMAIN, {}).get("host", "192.168.1.50")
-    port = config.get(DOMAIN, {}).get("port", 81)
+    host = entry.data[CONF_HOST]
+    port = entry.data[CONF_PORT]
 
     ws_link = ESPMouseConnection(host, port)
     hass.data[DOMAIN] = ws_link
-    hass.loop.create_task(ws_link.run_forever())
+    hass.async_create_task(ws_link.run_forever())
 
     # --- service handlers ---
     
@@ -56,7 +112,7 @@ async def async_setup(hass, config):
         dy = int(call.data.get("y", 0))
         
         # Format: 0x01 | int16 dx | int16 dy (5 bytes total, < means little-endian)
-        packet = struct.pack("<Bhh", OPCODE_MOUSE_RELATIVE, dx, dy)
+        packet = MOVE_PACKER.pack(OPCODE_MOUSE_RELATIVE, dx, dy)
         await ws_link.send(packet, binary=True)
 
     # 0x02: ABSOLUTE MOUSE MOVE
@@ -175,24 +231,31 @@ async def async_setup(hass, config):
         if not text:
             return
         
-        # Format: 0x41 | raw utf8 text...
-        # The payload is the opcode (0x41) + the string encoded as bytes
-        packet = struct.pack("<B", OPCODE_TEXT_SEND) + text.encode('utf-8')
+        # CRITICAL FIX: Add null terminator \x00 for ESP32's C-string expectations
+        # Format: 0x41 | raw utf8 text | \x00
+        packet = struct.pack("<B", OPCODE_TEXT_SEND) + text.encode('utf-8') + b'\x00'
         await ws_link.send(packet, binary=True)
 
 
     # --- Register ALL Services ---
-    hass.services.async_register(DOMAIN, "move", handle_move)
-    hass.services.async_register(DOMAIN, "move_absolute", handle_move_absolute)
-    hass.services.async_register(DOMAIN, "button", handle_button) 
-    hass.services.async_register(DOMAIN, "scroll_wheel", handle_scroll_wheel)
-    hass.services.async_register(DOMAIN, "touchpad_scroll", handle_touchpad_scroll)
+    # Using schemas makes these services safer and visible in HA's UI
+    hass.services.async_register(DOMAIN, "move", handle_move, schema=SERVICE_MOVE_SCHEMA)
+    hass.services.async_register(DOMAIN, "move_absolute", handle_move_absolute, schema=SERVICE_MOVE_ABS_SCHEMA)
+    hass.services.async_register(DOMAIN, "button", handle_button, schema=SERVICE_BUTTON_SCHEMA) 
+    hass.services.async_register(DOMAIN, "scroll_wheel", handle_scroll_wheel, schema=SERVICE_SCROLL_SCHEMA)
+    hass.services.async_register(DOMAIN, "touchpad_scroll", handle_touchpad_scroll, schema=SERVICE_SCROLL_SCHEMA)
     
-    # NEWLY ADDED/COMPLETED SERVICES
-    hass.services.async_register(DOMAIN, "key_control", handle_key_control)
-    hass.services.async_register(DOMAIN, "media_control", handle_media_control)
-    hass.services.async_register(DOMAIN, "text_send", handle_text_send)
+    hass.services.async_register(DOMAIN, "key_control", handle_key_control, schema=SERVICE_KEY_SCHEMA)
+    hass.services.async_register(DOMAIN, "media_control", handle_media_control, schema=SERVICE_MEDIA_SCHEMA)
+    hass.services.async_register(DOMAIN, "text_send", handle_text_send, schema=SERVICE_TEXT_SCHEMA)
 
+    return True
+
+
+async def async_unload_entry(hass, entry: ConfigEntry):
+    """Unload a config entry."""
+    ws_link = hass.data.pop(DOMAIN)
+    await ws_link.stop_forever()
     return True
 
 
@@ -203,6 +266,7 @@ class ESPMouseConnection:
         self.uri = f"ws://{host}:{port}"
         self.ws = None
         self.connected = asyncio.Event()
+        self._run_task = None # To hold the asyncio task for run_forever
 
     async def run_forever(self):
         """Maintain a persistent connection and reconnect on failure."""
@@ -213,21 +277,32 @@ class ESPMouseConnection:
                 async with websockets.connect(self.uri, ping_interval=None) as ws:
                     self.ws = ws
                     self.connected.set()
+                    self._run_task = asyncio.current_task() # Store the current task
                     _LOGGER.info("Connected to ESP Mouse.")
                     async for _ in ws:
                         pass  # keep connection alive
             except Exception as err:
                 _LOGGER.warning("ESP Mouse disconnected: %s", err)
                 self.connected.clear()
-                await asyncio.sleep(2)
+                if self._run_task and self._run_task.done(): # Check if the task was cancelled
+                    break # Exit loop if the task was intentionally cancelled (e.g., during unload)
+                await asyncio.sleep(5) # Increased delay for reconnection attempts
+
+    async def stop_forever(self):
+        """Stop the persistent connection task."""
+        if self._run_task:
+            self._run_task.cancel() # Request the task to cancel
+            await asyncio.gather(self._run_task, return_exceptions=True) # Wait for it to finish cancelling
+        if self.ws: # Ensure WebSocket is closed if it's still open
+            await self.ws.close()
 
     async def send(self, data, binary=False):
         """Send bytes (binary) or text to ESP."""
         if not self.connected.is_set():
-            _LOGGER.debug("Not connected, dropping packet")
+            _LOGGER.warning("ESP Mouse not connected; packet dropped.")
             return
         try:
             # websockets automatically detects bytes → binary
-            await self.ws.send(data)
+            await asyncio.wait_for(self.ws.send(data), timeout=0.5)
         except Exception as err:
             _LOGGER.warning("Send failed: %s", err)
