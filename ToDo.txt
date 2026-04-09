@@ -1,21 +1,5 @@
-Home assistant app
-
-- remember the config of absolute gyro would be nice
-
-Home assistant mobile Firefox
-
-- remember the config of absolute gyro would be nice
-
-Home assistant pc Firefox
-
-
-
-WiFi connected Firefox
-
-
-
-hotsopt Firefox
-
-
-encrypt to homeassistant
 WiFi setup page
+host own page with gui
+change desktop behavior so you click on a button and everything gets mirrored until you click ctr alt esc
+save last absolute gyro config
+Funktion to recenter absolute mouse
