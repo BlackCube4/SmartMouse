@@ -2,10 +2,10 @@
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_NAME
 from homeassistant.helpers import selector
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_PASSWORD
 
 
 class ESP32MouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -26,25 +26,31 @@ class ESP32MouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 host = user_input[CONF_HOST]
+                name = user_input.get(CONF_NAME, host)
+
                 # Check if already configured to prevent duplicate entries
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
 
-                return self.async_create_entry(title=host, data=user_input)
+                return self.async_create_entry(title=name, data=user_input)
 
         # Show form to the user
         # Using self.add_suggested_values_to_schema ensures that if there is an error,
         # the values the user typed are kept in the fields instead of resetting.
         data_schema = self.add_suggested_values_to_schema(
             vol.Schema({
+                vol.Required(CONF_NAME, default="ESP32 Mouse"): selector.TextSelector(),
                 vol.Required(CONF_HOST): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
                 ),
                 vol.Required(CONF_PORT): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=1, max=65535, mode=selector.NumberSelectorMode.BOX)
                 ),
+                vol.Optional(CONF_PASSWORD): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
             }),
-            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81}
+            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81, CONF_NAME: "ESP32 Mouse"}
         )
 
         return self.async_show_form(

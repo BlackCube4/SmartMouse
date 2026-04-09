@@ -8,7 +8,9 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.config_entries import ConfigEntry
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_PASSWORD
+
+PLATFORMS = ["binary_sensor"]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,10 +100,14 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     """Set up the ESP Mouse integration."""
     host = entry.data[CONF_HOST]
     port = entry.data[CONF_PORT]
+    password = entry.data.get(CONF_PASSWORD, "")
 
-    ws_link = ESPMouseConnection(host, port)
+    ws_link = ESPMouseConnection(host, port, password, entry)
     hass.data[DOMAIN] = ws_link
     hass.async_create_task(ws_link.run_forever())
+
+    # Forward setup to platforms (like binary_sensor)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # --- service handlers ---
     
@@ -262,10 +268,13 @@ async def async_unload_entry(hass, entry: ConfigEntry):
 class ESPMouseConnection:
     """Persistent WebSocket connection to the ESP32 mouse server."""
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, password="", entry=None):
         self.uri = f"ws://{host}:{port}"
         self.ws = None
         self.connected = asyncio.Event()
+        self.password = password
+        self.entry = entry
+        self._listeners = []
         self._run_task = None # To hold the asyncio task for run_forever
 
     async def run_forever(self):
@@ -277,13 +286,21 @@ class ESPMouseConnection:
                 async with websockets.connect(self.uri, ping_interval=None) as ws:
                     self.ws = ws
                     self.connected.set()
+                    self._notify_listeners()
                     self._run_task = asyncio.current_task() # Store the current task
+                    
+                    # Auth Handshake: Send password as the first message
+                    if self.password:
+                        auth_packet = struct.pack("<B", 0xFF) + self.password.encode('utf-8') + b'\x00'
+                        await ws.send(auth_packet)
+                    
                     _LOGGER.info("Connected to ESP Mouse.")
                     async for _ in ws:
                         pass  # keep connection alive
             except Exception as err:
-                _LOGGER.warning("ESP Mouse disconnected: %s", err)
                 self.connected.clear()
+                self._notify_listeners()
+                _LOGGER.warning("ESP Mouse disconnected: %s", err)
                 if self._run_task and self._run_task.done(): # Check if the task was cancelled
                     break # Exit loop if the task was intentionally cancelled (e.g., during unload)
                 await asyncio.sleep(5) # Increased delay for reconnection attempts
@@ -306,3 +323,11 @@ class ESPMouseConnection:
             await asyncio.wait_for(self.ws.send(data), timeout=0.5)
         except Exception as err:
             _LOGGER.warning("Send failed: %s", err)
+
+    def add_listener(self, callback):
+        """Add a callback to be notified of connection state changes."""
+        self._listeners.append(callback)
+
+    def _notify_listeners(self):
+        for callback in self._listeners:
+            callback()

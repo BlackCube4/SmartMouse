@@ -18,6 +18,10 @@ const char* ssid     = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const bool  test     = false;
 
+// Security
+const char* secret_key = "CHANGE_ME_SECRET"; // Set this to match your HA config
+bool client_authenticated = false;         // Simple flag to gatekeep HID commands
+
 WebSocketsServer wsServer(81);
 WebServer server(80);
 
@@ -33,9 +37,28 @@ void handleRoot() {
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-  if (length < 1) return;
+  if (type == WStype_DISCONNECTED) {
+    client_authenticated = false;
+    return;
+  }
+
+  if (length < 1 || type != WStype_BIN) return;
 
   uint8_t cmd = payload[0];
+
+  // Handle Authentication (Opcode 0xFF)
+  if (cmd == 0xFF) {
+    if (strcmp((const char*)&payload[1], secret_key) == 0) {
+      client_authenticated = true;
+      Serial.println("Client Authenticated.");
+    } else {
+      wsServer.disconnect(num);
+    }
+    return;
+  }
+
+  // Ignore everything else until auth is done
+  if (!client_authenticated) return;
 
   switch (cmd) {
     // ---------------------------------------
@@ -157,7 +180,9 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
       break;
     }
     default: {
-      Serial.printf("Unknown command: ", cmd);
+      // if (Serial.availableForWrite() > 32) {
+      //   Serial.printf("Unknown command: 0x%02X\n", cmd);
+      // }
       break;
     }
   }
@@ -165,6 +190,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
 
 void setup() {
   Serial.begin(115200);
+  setCpuFrequencyMhz(240); // Maximize processing speed
 
   // Properly turn off the addressable RGB LED
   statusLED.begin();
@@ -180,6 +206,7 @@ void setup() {
 
   // WiFi Connection - already exists
   WiFi.begin(ssid, password);
+  WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
