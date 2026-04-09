@@ -18,6 +18,20 @@ const char* ssid     = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const bool  test     = false;
 
+// Power Management
+unsigned long lastActivityTime = 0;
+bool isPowerSaving = false;
+const unsigned long SLEEP_TIMEOUT = 20 * 60 * 1000; // 20 minutes
+
+// Telemetry Timing
+unsigned long lastTelemetryTime = 0;
+const unsigned long TELEMETRY_INTERVAL = 10000; // 10 seconds
+
+// Thermal Management
+bool thermalThrottled = false;
+const float TEMP_LIMIT_HIGH = 80.0; // Celsius - Start throttling
+const float TEMP_LIMIT_LOW  = 60.0; // Celsius - Resume high performance
+
 // Security
 const char* secret_key = "CHANGE_ME_SECRET"; // Set this to match your HA config
 bool client_authenticated = false;         // Simple flag to gatekeep HID commands
@@ -31,14 +45,43 @@ WebServer server(80);
 // Initialize the NeoPixel object: 1 pixel on pin 48
 Adafruit_NeoPixel statusLED(1, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
 
+void wakeUp() {
+  if (thermalThrottled) {
+    Serial.println("Wakeup blocked: Device is too hot!");
+    return;
+  }
+  
+  if (!isPowerSaving) return;
+  setCpuFrequencyMhz(240);
+  WiFi.setSleep(false);
+  isPowerSaving = false;
+  Serial.println("System: Waking up to High Performance mode.");
+}
+
+void enterPowerSaving() {
+  if (isPowerSaving) return;
+  WiFi.setSleep(true);   // Enable modem sleep to save radio power
+  setCpuFrequencyMhz(80); // Drop clock speed to reduce thermal output
+  isPowerSaving = true;
+  Serial.println("System: Entering Power Saving (Inactivity).");
+}
+
 // NEW: Function to handle HTTP requests for the web page
 void handleRoot() {
+  wakeUp();
+  lastActivityTime = millis();
   server.send(200, "text/html", INDEX_HTML);
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  if (type == WStype_BIN || type == WStype_TEXT) {
+    wakeUp();
+    lastActivityTime = millis();
+  }
+
   if (type == WStype_DISCONNECTED) {
     client_authenticated = false;
+    lastActivityTime = millis(); // Reset timer on disconnect
     return;
   }
 
@@ -215,6 +258,9 @@ void setup() {
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
 
+  lastTelemetryTime = millis();
+  lastActivityTime = millis();
+
   // NEW: Initialize Web Server
   server.on("/", HTTP_GET, handleRoot); // Handle the root path to serve the HTML
   server.begin(); // Start the HTTP server on port 80
@@ -324,5 +370,38 @@ void setup() {
 void loop() {
   server.handleClient();
   wsServer.loop();
+
+  // Periodic Telemetry and Thermal Check (Every 10 seconds)
+  if (millis() - lastTelemetryTime > TELEMETRY_INTERVAL) {
+    lastTelemetryTime = millis();
+    
+    float currentTemp = temperatureRead();
+    int8_t rssi = (int8_t)WiFi.RSSI();
+
+    // Thermal Logic
+    if (!thermalThrottled && currentTemp > TEMP_LIMIT_HIGH) {
+      thermalThrottled = true;
+      Serial.printf("CRITICAL: Temperature %.2fC exceeded limit! Throttling...\n", currentTemp);
+      enterPowerSaving();
+    } else if (thermalThrottled && currentTemp < TEMP_LIMIT_LOW) {
+      thermalThrottled = false;
+      Serial.printf("INFO: Temperature %.2fC normalized. Thermal lock released.\n", currentTemp);
+    }
+
+    // Send Telemetry to Home Assistant (Opcode 0xF0 | float temp | int8 rssi)
+    if (client_authenticated) {
+      uint8_t telePacket[6];
+      telePacket[0] = 0xF0;
+      memcpy(&telePacket[1], &currentTemp, 4);
+      telePacket[5] = (uint8_t)rssi;
+      wsServer.broadcastBIN(telePacket, 6);
+    }
+  }
+
+  // Check for inactivity timeout
+  if (!isPowerSaving && (millis() - lastActivityTime > SLEEP_TIMEOUT)) {
+    enterPowerSaving();
+  }
+
   delay(0);
 }

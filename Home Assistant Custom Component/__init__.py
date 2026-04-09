@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, CONF_PASSWORD
 
-PLATFORMS = ["binary_sensor"]
+PLATFORMS = ["binary_sensor", "sensor"]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -273,6 +273,8 @@ class ESPMouseConnection:
         self.ws = None
         self.connected = asyncio.Event()
         self.password = password
+        self.temperature = None
+        self.rssi = None
         self.entry = entry
         self._listeners = []
         self._run_task = None # To hold the asyncio task for run_forever
@@ -295,8 +297,14 @@ class ESPMouseConnection:
                         await ws.send(auth_packet)
                     
                     _LOGGER.info("Connected to ESP Mouse.")
-                    async for _ in ws:
-                        pass  # keep connection alive
+                    async for message in ws:
+                        if isinstance(message, bytes) and len(message) == 6 and message[0] == 0xF0:
+                            # Skip Opcode (x) | Unpack Float (f) | Unpack Int8 (b)
+                            temp, rssi = struct.unpack("<xfb", message)
+                            self.temperature = round(temp, 1)
+                            self.rssi = rssi
+                            self._notify_listeners()
+                        
             except Exception as err:
                 self.connected.clear()
                 self._notify_listeners()

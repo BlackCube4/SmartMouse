@@ -1,6 +1,7 @@
 {
   "domain": "esp_mouse",
   "name": "ESP Mouse",
+  "icon": "mdi:mouse",
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
