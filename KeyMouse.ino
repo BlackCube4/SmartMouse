@@ -6,6 +6,7 @@
 #include "USBHIDMouse.h"
 #include "USBHIDTouchpad.h"
 #include <WebServer.h>
+#include <Adafruit_NeoPixel.h>
 #include "index_html.h"
 
 USBHIDKeyboardUTF8 keyboard;
@@ -19,6 +20,12 @@ const bool  test     = false;
 
 WebSocketsServer wsServer(81);
 WebServer server(80);
+
+// Pin 48 is the addressable WS2812 RGB LED.
+#define RGB_LED_PIN 48
+
+// Initialize the NeoPixel object: 1 pixel on pin 48
+Adafruit_NeoPixel statusLED(1, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // NEW: Function to handle HTTP requests for the web page
 void handleRoot() {
@@ -158,6 +165,11 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
 
 void setup() {
   Serial.begin(115200);
+
+  // Properly turn off the addressable RGB LED
+  statusLED.begin();
+  statusLED.setPixelColor(0, statusLED.Color(0, 0, 0)); // Set color to Black/Off
+  statusLED.show();
 
   // USB/HID Setup - already exists
   USB.begin();
