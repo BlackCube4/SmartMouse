@@ -390,11 +390,12 @@ void loop() {
 
     // Send Telemetry to Home Assistant (Opcode 0xF0 | float temp | int8 rssi)
     if (client_authenticated) {
-      uint8_t telePacket[6];
+      uint8_t telePacket[7];
       telePacket[0] = 0xF0;
       memcpy(&telePacket[1], &currentTemp, 4);
       telePacket[5] = (uint8_t)rssi;
-      wsServer.broadcastBIN(telePacket, 6);
+      telePacket[6] = isPowerSaving ? 1 : 0;
+      wsServer.broadcastBIN(telePacket, 7);
     }
   }
 

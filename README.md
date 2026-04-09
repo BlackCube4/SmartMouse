@@ -34,7 +34,7 @@ debug: true
 | `0x02` | Absolute Mouse | `int16 x, int16 y` |
 | `0x13` | Key Send | `uint8 keycode` |
 | `0x41` | Text Send | `string (null terminated)` |
-| `0xF0` | Telemetry | `float temp, int8 rssi` |
+| `0xF0` | Telemetry | `float temp, int8 rssi, uint8 power_save` |
 | `0xFF` | Auth Handshake| `string password` |
 
 ## Power & Thermal Management

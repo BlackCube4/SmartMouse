@@ -275,6 +275,7 @@ class ESPMouseConnection:
         self.password = password
         self.temperature = None
         self.rssi = None
+        self.power_saving = None
         self.entry = entry
         self._listeners = []
         self._run_task = None # To hold the asyncio task for run_forever
@@ -298,11 +299,12 @@ class ESPMouseConnection:
                     
                     _LOGGER.info("Connected to ESP Mouse.")
                     async for message in ws:
-                        if isinstance(message, bytes) and len(message) == 6 and message[0] == 0xF0:
-                            # Skip Opcode (x) | Unpack Float (f) | Unpack Int8 (b)
-                            temp, rssi = struct.unpack("<xfb", message)
+                        if isinstance(message, bytes) and len(message) == 7 and message[0] == 0xF0:
+                            # Skip Opcode (x) | Unpack Float (f) | Unpack Int8 (b) | Unpack PowerSave (b)
+                            temp, rssi, pwr_save = struct.unpack("<xfbb", message)
                             self.temperature = round(temp, 1)
                             self.rssi = rssi
+                            self.power_saving = bool(pwr_save)
                             self._notify_listeners()
                         
             except Exception as err:
