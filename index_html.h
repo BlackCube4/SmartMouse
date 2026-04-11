@@ -1,35 +1,70 @@
 const char* INDEX_HTML = R"rawliteral(
 <!DOCTYPE html>
-<html>
+<html lang="en" data-theme="dark">
 <head>
   <title>ESP32 S3 HID</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta charset="UTF-8">
 
   <style>
-    /* Basis-Styles für die gesamte Seite, der Rest wird von UIBuilder.js verwaltet */
+    /* Theme Variables */
+    :root[data-theme="dark"] {
+      --bg-color: #121212;
+      --card-bg: #1e1f22;
+      --border-color: #2b2c2f;
+      --text-color: #ffffff;
+      --text-muted: #aaaaaa;
+      --btn-dark: #2b2c2f;
+      --btn-light: #3a3b3f;
+      --trackpad-bg: #2a2b2e;
+      --primary: #666666;
+      --error: #e74c3c;
+      --divider: #3a3b3d;
+      --box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+    }
+
+    :root[data-theme="light"] {
+      --bg-color: #e9ecef;
+      --card-bg: #ffffff;
+      --border-color: transparent;
+      --text-color: #212529;
+      --text-muted: #6c757d;
+      --btn-dark: #ffffff;
+      --btn-light: #f0f0f0;
+      --trackpad-bg: #f8f9fa;
+      --primary: #0d6efd;
+      --error: #dc3545;
+      --divider: transparent;
+      --box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+    }
+
     body { 
-      font-family: 'Inter', sans-serif; 
+      font-family: 'Inter', system-ui, sans-serif; 
       text-align: center; 
       margin: 0; 
-      padding: 10px; /* Leichtes Padding für den Header */
-      background-color: #f4f4f4; 
+      padding: 10px; 
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      transition: background-color 0.3s, color 0.3s;
+      user-select: none;
+      -webkit-user-select: none;
     }
     
-    /* Header Style */
-    #status-header {
-        margin-bottom: 10px;
+    #header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 0 5px;
     }
+
     #status-header h1 {
       font-size: 18px;
-      color: #333; /* Dunkler Text für besseren Kontrast */
       margin: 0;
       display: flex;
       align-items: center;
-      justify-content: center;
     }
     
-    /* Status Dot */
     .status-dot {
       display: inline-block;
       width: 10px;
@@ -38,44 +73,61 @@ const char* INDEX_HTML = R"rawliteral(
       margin-left: 8px;
       transition: background-color 0.3s;
     }
-
-    .status-dot.connected {
-      background-color: #4a4; /* Grün */
-    }
-
-    .status-dot.disconnected {
-      background-color: #a44; /* Rot */
-    }
-
-    .status-dot.connecting {
-      background-color: #aa4; /* Gelb */
-    }
+    .status-dot.connected { background-color: #4a4; }
+    .status-dot.disconnected { background-color: #a44; }
+    .status-dot.connecting { background-color: #aa4; }
     
-    /* Root der Card */
+    #theme-toggle {
+      background: var(--btn-dark);
+      color: var(--text-color);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #theme-toggle:active {
+      background: var(--btn-light);
+    }
+
     #root {
       width: 100%;
-      min-height: 100vh;
       box-sizing: border-box;
     }
   </style>
 </head>
-
-
 <body>
-  <div id="status-header">
-    <h1>ESP32 S3 HID <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
+  <div id="header-container">
+    <div id="status-header">
+      <h1>ESP32 HID <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
+    </div>
+    <button id="theme-toggle">☀️/🌙</button>
   </div>
   
   <div id="root">
     <h1>Loading HID Controller...</h1>
   </div>
 
-
 <script>
+  // ==========================================
+  // THEME MANAGEMENT
+  // ==========================================
+  const themeToggle = document.getElementById('theme-toggle');
+  const savedTheme = localStorage.getItem('esp_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
 
-  // -------------------------------------------------------------------------
-  // 1. ServiceManager Class (Übernimmt WebSocket-Kommunikation)
-  // -------------------------------------------------------------------------
+  themeToggle.addEventListener('click', () => {
+      const root = document.documentElement;
+      const isDark = root.getAttribute('data-theme') === 'dark';
+      const newTheme = isDark ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('esp_theme', newTheme);
+  });
+
+  // ==========================================
+  // 1. ServiceManager Class
+  // ==========================================
   class ServiceManager {
       constructor() {
           this.statusDot = document.getElementById('ws-status-dot');
@@ -85,43 +137,27 @@ const char* INDEX_HTML = R"rawliteral(
       }
 
       setStatus(status) {
-          if (this.statusDot) {
-              this.statusDot.className = 'status-dot ' + status;
-          }
+          if (this.statusDot) this.statusDot.className = 'status-dot ' + status;
       }
 
       initWebSocket() {
-          console.log('Trying to open a WebSocket connection...');
-          this.setStatus('connecting'); // Setze Status auf Gelb
+          this.setStatus('connecting');
           this.websocket = new WebSocket(this.gateway);
           this.websocket.binaryType = "arraybuffer";
           this.websocket.onopen = this.onOpen.bind(this);
           this.websocket.onclose = this.onClose.bind(this);
           this.websocket.onmessage = this.onMessage.bind(this);
-          this.websocket.onerror = this.onError.bind(this); // Optional: Fehlerbehandlung
+          this.websocket.onerror = this.onError.bind(this);
       }
       
-      onOpen() {
-          console.log('Connection opened');
-          this.setStatus('connected'); // Setze Status auf Grün
-      }
-
+      onOpen() { this.setStatus('connected'); }
       onClose() {
-          console.log('Connection closed');
-          this.setStatus('disconnected'); // Setze Status auf Rot
+          this.setStatus('disconnected');
           setTimeout(() => this.initWebSocket(), 2000);
       }
+      onError(event) { this.websocket.close(); }
+      onMessage(event) { console.log("Msg: " + event.data); }
       
-      onError(event) {
-          console.error("WebSocket Error:", event);
-          this.websocket.close();
-      }
-
-      onMessage(event) {
-          console.log("Message from server: " + event.data);
-      }
-      
-      // Allgemeine Send-Funktion für 2-Byte-Befehle
       sendCmd(opcode, value) {
           if (this.websocket && this.websocket.readyState === 1) {
               var buffer = new Uint8Array(2);
@@ -131,97 +167,75 @@ const char* INDEX_HTML = R"rawliteral(
           }
       }
 
-      // ---------------------------------------------------------------------
-      // Funktionen, die von UIBuilder/TouchpadHandler aufgerufen werden
-      // (OpCodes müssen mit dem ESP32-Backend übereinstimmen)
-      // ---------------------------------------------------------------------
-      
-      // RELATIVE MOUSE MOVE (OpCode: 0x01, 5 Bytes: [0x01, dx_L, dx_H, dy_L, dy_H])
       sendMove(dx, dy) {
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(5);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x01); // RELATIVE MOUSE MOVE
+              view.setUint8(0, 0x01);
               view.setInt16(1, dx, true);
               view.setInt16(3, dy, true);
               this.websocket.send(buffer);
           }
       }
 
-      // ABSOLUTE MOUSE MOVE (OpCode: 0x02, 5 Bytes: [0x02, x_L, x_H, y_L, y_H]) - Beispiel
       sendMoveAbsolute(x, y) {
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(5);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x02); // Beispiel: ABSOLUTE MOUSE MOVE
+              view.setUint8(0, 0x02);
               view.setInt16(1, x, true);
               view.setInt16(3, y, true);
               this.websocket.send(buffer);
           }
       }
 
-      // MOUSE BUTTON (OpCodes: 0x21/0x22/0x23)
       sendButton(button, state) {
           let opcode;
           let value;
-          
           const buttonMap = { "left": 1, "right": 2, "middle": 4 };
           value = buttonMap[button] || 1;
-          
           if (state === "down") opcode = 0x21; 
-          else if (state === "up") opcode = 0x22; 
+          else if (state === "up") opcode = 0x22;
           else if (state === "click" || state === "send") opcode = 0x23;
-
-          if (opcode) {
-              this.sendCmd(opcode, value);
-          }
+          if (opcode) this.sendCmd(opcode, value);
       }
       
-      // SCROLL / WHEEL (OpCode: 0x51, 3 Bytes: [0x51, steps_L, steps_H])
-      sendTouchpadScroll(amount) {
-           this.sendScrollWheel(amount);
-      }
+      sendTouchpadScroll(amount) { this.sendScrollWheel(amount); }
       
       sendScrollWheel(amount) {
            if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(3);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x51); // LOW RES SCROLL
+              view.setUint8(0, 0x51);
               view.setInt16(1, amount, true);
               this.websocket.send(buffer);
            }
       }
       
-      // MEDIA KEY (OpCodes: 0x31/0x32, 2 Bytes: [OpCode, KeyCode]) - Beispiel
       sendMediaKey(code, state) {
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new Uint8Array(2);
-              buffer[0] = (state === "press") ? 0x31 : 0x32; // Beispiel: MEDIA KEY PRESS/RELEASE
+              buffer[0] = (state === "press") ? 0x31 : 0x32;
               buffer[1] = code;
               this.websocket.send(buffer);
           }
       }
 
-      // KEY (OpCodes: 0x11/0x12/0x13, 2 Bytes: [OpCode, KeyCode])
       sendKey(code, state) {
           if (this.websocket && this.websocket.readyState === 1) {
               let opcode;
               if (state === "press") opcode = 0x11;
               else if (state === "release") opcode = 0x12;
-              else if (state === "send") opcode = 0x13; // press + release
-              
-              if (opcode) {
-                  this.sendCmd(opcode, code);
-              }
+              else if (state === "send") opcode = 0x13;
+              if (opcode) this.sendCmd(opcode, code);
           }
       }
       
-      // TEXT (OpCode: 0x41, N Bytes: [0x41, char1, char2, ...]) - Beispiel
       sendText(text) {
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(1 + text.length);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x41); // Beispiel: TEXT INPUT
+              view.setUint8(0, 0x41);
               for (let i = 0; i < text.length; i++) {
                   view.setUint8(1 + i, text.charCodeAt(i));
               }
@@ -230,263 +244,386 @@ const char* INDEX_HTML = R"rawliteral(
       }
   }
 
-  // -------------------------------------------------------------------------
-  // 2. GyroHandler Class (Übernommen aus gyro-handler.js)
-  // -------------------------------------------------------------------------
+  // ==========================================
+  // 2. GyroHandler Class (Hybrid Mode)
+  // ==========================================
   class GyroHandler {
     constructor(serviceManager, config) {
       this.serviceManager = serviceManager;
       this.config = config;
-      
+
       this.gyroRelativeActive = false;
       this.gyroAbsoluteActive = false;
-      this.lastMotion = null;
-      this.gyroSuppressedUntil = 0;
-      
-      // Smoothing
-      this.positionHistory = [];
-      this.historySize = 5;
-      
-      // Calibration
-      this.calibrating = false;
+      this.isCalibrated = false;
       this.calibrationStartTime = 0;
       this.calibrationDuration = 3000;
-      this.calibrationMinHeading = Infinity;
-      this.calibrationMaxHeading = -Infinity;
-      this.calibrationMinTilt = Infinity;
-      this.calibrationMaxTilt = -Infinity;
-      this.calibrationTopLeft = { heading: 0, tilt: 0 };
-      this.calibrationBottomRight = { heading: 0, tilt: 0 };
-      this.isCalibrated = false;
-      
-      this.absoluteHeading = 0;
-      this.absoluteTilt = 0;
-      
-      this.GAIN_X = config.gyro_gain_x ?? 32;
-      this.GAIN_Y = config.gyro_gain_y ?? 38;
-      this.SPEED_FILTER = config.gyro_speed_filter ?? 0.5;
-      
-      this.setupListeners();
-    }
+      this.calibrating = false;
 
-    setupListeners() {
-      window.addEventListener("devicemotion", (ev) => this.handleMotion(ev));
-      window.addEventListener("deviceorientation", (ev) => this.handleOrientation(ev));
-    }
+      this.orientation = { x: 0, y: 0, z: 0 };
+      this.lastOrientation = { x: null, y: null, z: null };
+      this.originalCalibrateBtnIcon = "";
 
-    isLandscape() {
-      const angle = screen.orientation?.angle ?? window.orientation ?? 0;
-      return angle === 90 || angle === -90 || angle === 270;
-    }
+      this.bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+      this.smoothX = 0;
+      this.smoothY = 0;
+      this.smoothZ = 0;
 
-    getLandscapeOrientation() {
-      return screen.orientation?.angle ?? window.orientation ?? 0;
-    }
+      this.lastReadingTime = performance.now();
+      this.readingCount = 0;
+      this.measuredFrequency = 0.0;
 
-    setGyroSuppression(duration) {
-      this.gyroSuppressedUntil = Date.now() + duration;
-    }
+      this.GAIN = config.gyroSensitivity ?? 8.0;
+      this.SMOOTHING = config.smoothing ?? 0.2; 
+      this.SUPPRESSION_OFFSET = config.suppression_offset ?? 20;
+      this.suppressionEndTime = 0;
 
-    handleMotion(ev) {
-      if (!this.gyroRelativeActive || !ev.rotationRate) return;
-      if (Date.now() < this.gyroSuppressedUntil) return;
+      this.sensor = null;
+      this.usingModernAPI = false;
+      this.isListening = false;
 
-      const { gamma, alpha, beta } = ev.rotationRate;
-      const now = performance.now();
-      let dt = 0.016;
-      if (this.lastMotion !== null) dt = (now - this.lastMotion) / 1000;
-      this.lastMotion = now;
+      this.updateInterval = setInterval(() => this.processLoop(), 10);
+      this.loadCalibration();
 
-      const speedX = Math.abs(gamma);
-      const rotX = speedX < this.SPEED_FILTER ? 0 : gamma;
-
-      let rawVertical = this.isLandscape() ? -beta : alpha;
-      const speedY = Math.abs(rawVertical);
-      const rotY = speedY < this.SPEED_FILTER ? 0 : rawVertical;
-
-      // Call parent's addMovement if available
-      if (this.touchpadHandler) {
-        this.touchpadHandler.addMovement(-rotX * dt * this.GAIN_X, -rotY * dt * this.GAIN_Y);
+      if (this.config.debug) {
+          this.startListening();
       }
     }
 
-    handleOrientation(ev) {
-      let heading = ev.alpha ?? 0;
-      let tilt;
-      
-      if (this.isLandscape()) {
-        const orientation = this.getLandscapeOrientation();
-        if (orientation === 90 || orientation === -270) {
-          heading = (heading + 90) % 360;
-        } else if (orientation === -90 || orientation === 270) {
-          heading = (heading - 90 + 360) % 360;
-        }
-        tilt = -(ev.gamma ?? 0);
-      } else {
-        tilt = ev.beta ?? 0;
-      }
+    processLoop() {
+      if (!this.gyroRelativeActive && !this.gyroAbsoluteActive) return;
 
-      this.absoluteHeading = heading;
-      this.absoluteTilt = tilt;
-
-      if (this.calibrating) {
-        this.updateCalibration(heading, tilt);
+      if (performance.now() < this.suppressionEndTime) {
+        this.lastOrientation.x = this.orientation.x;
+        this.lastOrientation.y = this.orientation.y;
         return;
       }
 
-      if (this.isCalibrated && this.gyroAbsoluteActive) {
-        if (Date.now() < this.gyroSuppressedUntil) return;
-        
-        const rawX = this.mapToScreen(
-          heading,
-          this.calibrationBottomRight.heading,
-          this.calibrationTopLeft.heading,
-          0,
-          32767
-        );
+      if (this.gyroAbsoluteActive) {
+        this.processAbsolute();
+        return;
+      }
 
-        const rawY = this.mapToScreen(
-          tilt,
-          this.calibrationBottomRight.tilt,
-          this.calibrationTopLeft.tilt,
-          0,
-          32767
-        );
+      if (this.lastOrientation.x === null) {
+        this.lastOrientation.x = this.orientation.x;
+        this.lastOrientation.y = this.orientation.y;
+        return;
+      }
 
-        this.positionHistory.push({ x: rawX, y: rawY });
-        
-        if (this.positionHistory.length > this.historySize) {
-          this.positionHistory.shift();
-        }
+      let dX = this.orientation.x - this.lastOrientation.x;
+      let dY = this.orientation.y - this.lastOrientation.y;
 
-        let sumX = 0;
-        let sumY = 0;
-        for (const pos of this.positionHistory) {
-          sumX += pos.x;
-          sumY += pos.y;
-        }
-        
-        const smoothX = sumX / this.positionHistory.length;
-        const smoothY = sumY / this.positionHistory.length;
+      if (dX > 180) dX -= 360;
+      if (dX < -180) dX += 360;
 
-        this.serviceManager.sendMoveAbsolute(Math.round(smoothX), Math.round(smoothY));
+      this.smoothX = (this.smoothX * this.SMOOTHING) + (dX * (1 - this.SMOOTHING));
+      this.smoothY = (this.smoothY * this.SMOOTHING) + (dY * (1 - this.SMOOTHING));
+
+      this.lastOrientation.x = this.orientation.x;
+      this.lastOrientation.y = this.orientation.y;
+
+      const moveX = this.smoothX * this.GAIN * -1;
+      const moveY = this.smoothY * this.GAIN * -1;
+
+      if (Math.abs(moveX) > 0.01 || Math.abs(moveY) > 0.01) {
+        this.serviceManager.sendMove(Math.round(moveX * 10), Math.round(moveY * 10));
       }
     }
 
-    updateCalibration(heading, tilt) {
-      const elapsed = Date.now() - this.calibrationStartTime;
+    processAbsolute() {
+      if (!this.isCalibrated || this.calibrating) return;
+
+      const targetMax = 32767;
+      const absX = this.mapCircular(this.orientation.x, this.bounds.minX, this.bounds.maxX, targetMax);
+      const absY = this.mapLinear(this.orientation.y, this.bounds.minY, this.bounds.maxY, targetMax);
+      const invertedAbsX = targetMax - absX;
+      const invertedAbsY = targetMax - absY;
+
+      this.smoothX = (this.smoothX * 0.7) + (invertedAbsX * 0.3);
+      this.smoothY = (this.smoothY * 0.7) + (invertedAbsY * 0.3);
+
+      this.serviceManager.sendMoveAbsolute(Math.round(this.smoothX), Math.round(this.smoothY));
+    }
+
+    mapLinear(val, min, max, targetMax) {
+      if (max === min) return targetMax / 2;
+      const clampedVal = Math.max(min, Math.min(max, val));
+      const ratio = (clampedVal - min) / (max - min);
+      return Math.round(ratio * targetMax);
+    }
+
+    mapCircular(val, minBound, maxBound, targetMax) {
+      const v = (val % 360 + 360) % 360;
+      const min = (minBound % 360 + 360) % 360;
+      const max = (maxBound % 360 + 360) % 360;
+      const arcLength = (max - min + 360) % 360;
       
-      if (elapsed < this.calibrationDuration) {
-        this.calibrationMinHeading = Math.min(this.calibrationMinHeading, heading);
-        this.calibrationMaxHeading = Math.max(this.calibrationMaxHeading, heading);
-        this.calibrationMinTilt = Math.min(this.calibrationMinTilt, tilt);
-        this.calibrationMaxTilt = Math.max(this.calibrationMaxTilt, tilt);
-        
-        const progress = Math.floor((elapsed / this.calibrationDuration) * 100);
-        if (this.calibrateBtn) {
-          this.calibrateBtn.textContent = `${progress}%`;
-        }
+      if (arcLength <= 0.1) return targetMax / 2;
+
+      const relativeVal = (v - min + 360) % 360;
+      if (relativeVal <= arcLength) {
+        return Math.round((relativeVal / arcLength) * targetMax);
       } else {
-        this.finishCalibration();
+        const distToMin = 360 - relativeVal;
+        const distToMax = relativeVal - arcLength;
+        return distToMin < distToMax ? 0 : targetMax;
       }
     }
 
-    startCalibration(button) {
-      this.calibrating = true;
-      this.calibrationStartTime = Date.now();
-      this.calibrationMinHeading = Infinity;
-      this.calibrationMaxHeading = -Infinity;
-      this.calibrationMinTilt = Infinity;
-      this.calibrationMaxTilt = -Infinity;
-      
-      this.calibrateBtn = button;
-      button.textContent = "0%";
-      button.style.background = "#666";
-      navigator.vibrate?.(100);
+    recenter() {
+      if (!this.isCalibrated) return;
+      const dx = (this.bounds.maxX - this.bounds.minX + 360) % 360;
+      const dy = this.bounds.maxY - this.bounds.minY;
+
+      this.bounds.minX = (this.orientation.x - dx / 2 + 360) % 360;
+      this.bounds.maxX = (this.orientation.x + dx / 2 + 360) % 360;
+      this.bounds.minY = this.orientation.y - dy / 2;
+      this.bounds.maxY = this.orientation.y + dy / 2;
+
+      this.saveCalibration();
+      navigator.vibrate?.([30, 30]);
+      if (this.debugElem) this.updateDebug("Recentered");
     }
 
-    finishCalibration() {
-      this.calibrating = false;
-      this.isCalibrated = true;
-      
-      this.calibrationTopLeft.heading = this.calibrationMinHeading;
-      this.calibrationTopLeft.tilt = this.calibrationMinTilt;
-      this.calibrationBottomRight.heading = this.calibrationMaxHeading;
-      this.calibrationBottomRight.tilt = this.calibrationMaxTilt;
-      
-      this.positionHistory = [];
-      
-      if (this.calibrateBtn) {
-        this.calibrateBtn.textContent = "⊕";
-        this.calibrateBtn.style.background = "#4a4";
-        
-        setTimeout(() => {
-          if (this.calibrateBtn && this.isCalibrated) {
-            this.calibrateBtn.style.background = "#666";
-          }
-        }, 2000);
+    setGyroSuppression(ms) {
+      this.suppressionEndTime = performance.now() + ms + this.SUPPRESSION_OFFSET;
+    }
+
+    startListening() {
+      if (this.isListening) return;
+      this.isListening = true;
+      this.readingCount = 0;
+      this.lastReadingTime = performance.now();
+
+      if (window.RelativeOrientationSensor) {
+        try {
+          this.sensor = new RelativeOrientationSensor({ frequency: 120, referenceFrame: 'device' });
+          this.sensor.addEventListener('reading', () => this.handleSensorReading());
+          
+          this.sensor.addEventListener('error', (event) => {
+            console.warn("Modern Sensor API failed. Falling back to Legacy.", event.error);
+            this.sensor = null;
+            this.startLegacyListener();
+          });
+          this.sensor.start();
+          this.usingModernAPI = true;
+          this.updateDebug("Modern API (Waiting for data)");
+          return;
+        } catch (err) {
+          console.warn("Modern Sensor API not available.", err);
+        }
       }
-      
-      navigator.vibrate?.(200);
+      this.startLegacyListener();
+    }
+    
+    startLegacyListener() {
+      if (!this.isListening) return;
+      this.usingModernAPI = false;
+      this.readingCount = 0;
+      this.lastReadingTime = performance.now();
+      if (!this._boundHandler) {
+          this._boundHandler = this.handleLegacyOrientation.bind(this);
+          window.addEventListener("deviceorientation", this._boundHandler, true);
+          this.updateDebug("Legacy API (Waiting for data)");
+      }
     }
 
-    mapToScreen(value, min, max, screenMin, screenMax) {
-      if (max === min) return (screenMin + screenMax) / 2;
+    stopListening() {
+      if (this.config.debug) return;
+      this.isListening = false;
+      if (this.sensor) {
+          this.sensor.stop();
+          this.sensor = null;
+      }
+      if (this._boundHandler) {
+        window.removeEventListener("deviceorientation", this._boundHandler, true);
+        this._boundHandler = null;
+      }
+    }
+
+    measureFrequency() {
+      const now = performance.now();
+      this.readingCount++;
+      if (this.readingCount >= 100) {
+          const timeElapsed = now - this.lastReadingTime;
+          this.measuredFrequency = (this.readingCount / timeElapsed) * 1000;
+          this.readingCount = 0;
+          this.lastReadingTime = now;
+      }
+    }
+
+    handleSensorReading() {
+      this.measureFrequency();
+      const q = this.sensor.quaternion;
+      const w = q[3], x = q[0], y = q[1], z = q[2];
+
+      const siny_cosp = 2 * (w * z + x * y);
+      const cosy_cosp = 1 - 2 * (y * y + z * z);
+      let alpha = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI);
+      alpha = (alpha + 360) % 360;
+
+      const sinr_cosp = 2 * (w * x + y * z);
+      const cosr_cosp = 1 - 2 * (x * x + y * y);
+      const beta = Math.atan2(sinr_cosp, cosr_cosp) * (180 / Math.PI); 
+
+      const sinp = 2 * (w * y - z * x);
+      let gamma;
+      if (Math.abs(sinp) >= 1) gamma = (Math.sign(sinp) * Math.PI / 2) * (180 / Math.PI);
+      else gamma = Math.asin(sinp) * (180 / Math.PI);
+
+      this.orientation = { x: alpha, y: beta, z: gamma };
+      if (this.calibrating) this.updateCalibrationBounds();
+      this.updateDebug("Modern API");
+    }
+
+    handleLegacyOrientation(event) {
+      this.measureFrequency();
+      this.orientation = {
+          x: event.alpha || 0,
+          y: event.beta || 0,
+          z: event.gamma || 0
+      };
+      if (this.calibrating) this.updateCalibrationBounds();
+      this.updateDebug("Legacy API", event);
+    }
+
+    updateDebug(source, event = null) {
+      if (!this.debugElem) return;
+      let frequencyText = "Measuring...";
+      if (this.measuredFrequency > 0) frequencyText = `${this.measuredFrequency.toFixed(1)} Hz`;
       
-      const ratio = (value - min) / (max - min);
-      const clampedRatio = Math.max(0, Math.min(1, ratio));
-      return screenMin + clampedRatio * (screenMax - screenMin);
+      let compassVal = "N/A";
+      if (event && event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+          compassVal = event.webkitCompassHeading.toFixed(1) + "°";
+      }
+
+      this.debugElem.textContent = 
+          `Source: ${source}\n` +
+          `Update Freq: ${frequencyText}\n` +
+          `------------------------------------\n` +
+          `X (Yaw):   ${this.orientation.x.toFixed(4)}\n` +
+          `Y (Pitch): ${this.orientation.y.toFixed(4)}\n` +
+          `Z (Roll):  ${this.orientation.z.toFixed(4)}\n` +
+          `Compass:   ${compassVal}\n` +
+          `Calibrated: ${this.isCalibrated ? 'YES' : 'NO'}`;
     }
 
     async toggleGyroRelative() {
-      if (this.gyroAbsoluteActive) {
-        this.toggleGyroAbsolute();
-      }
-
       if (this.gyroRelativeActive) {
         this.gyroRelativeActive = false;
-        if (this.gyroRelBtn) this.gyroRelBtn.style.background = "#2b2c2f";
+        this.stopListening();
         return;
       }
-
-      if (typeof DeviceMotionEvent?.requestPermission === "function") {
-        const r = await DeviceMotionEvent.requestPermission();
-        if (r !== "granted") return;
+      const granted = await this.requestPermission();
+      if (granted) {
+        this.gyroRelativeActive = true;
+        this.smoothX = 0;
+        this.smoothY = 0;
+        this.lastOrientation.x = null;
+        this.startListening();
       }
-
-      this.lastMotion = null;
-      this.gyroRelativeActive = true;
-      if (this.gyroRelBtn) this.gyroRelBtn.style.background = "#666";
     }
 
     async toggleGyroAbsolute() {
-      if (this.gyroRelativeActive) {
-        this.toggleGyroRelative();
-      }
-
       if (this.gyroAbsoluteActive) {
         this.gyroAbsoluteActive = false;
-        if (this.gyroAbsBtn) this.gyroAbsBtn.style.background = "#2b2c2f";
+        this.stopListening();
         return;
       }
+      const granted = await this.requestPermission();
+      if (granted) {
+        this.gyroAbsoluteActive = true;
+        this.smoothX = 0;
+        this.smoothY = 0;
+        this.startListening();
+      }
+    }
+    
+    async requestPermission() {
+      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+        try { return (await DeviceOrientationEvent.requestPermission()) === "granted"; } 
+        catch (error) { return false; }
+      }
+      return true;
+    }
 
-      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
-        const r = await DeviceOrientationEvent.requestPermission();
-        if (r !== "granted") return;
+    saveCalibration() {
+      localStorage.setItem('esp_mouse_gyro_bounds', JSON.stringify(this.bounds));
+      this.isCalibrated = true;
+    }
+
+    loadCalibration() {
+      const stored = localStorage.getItem('esp_mouse_gyro_bounds');
+      if (stored) {
+        this.bounds = JSON.parse(stored);
+        this.isCalibrated = true;
+      }
+    }
+
+    startCalibration(btn) {
+      this.calibrating = true;
+      this.isCalibrated = false;
+      this.calibrateBtnElem = btn;
+      this.originalCalibrateBtnIcon = btn.querySelector('.icon-placeholder')?.textContent || "⛶";
+      btn.innerHTML = "0%";
+      
+      this.bounds.minX = this.orientation.x;
+      this.bounds.maxX = this.orientation.x;
+      this.bounds.minY = this.orientation.y;
+      this.bounds.maxY = this.orientation.y;
+
+      btn.style.background = "var(--error)";
+      btn.style.color = "#fff";
+      this.calibrationStartTime = performance.now();
+      this.calTimer = setTimeout(() => this.finishCalibration(), 3000);
+      
+      if (this.debugElem) this.updateDebug("Calibrating...");
+    }
+
+    updateCalibrationBounds() {
+      const elapsed = performance.now() - this.calibrationStartTime;
+      const progress = Math.min(100, Math.floor((elapsed / this.calibrationDuration) * 100));
+      if (this.calibrateBtnElem) {
+        this.calibrateBtnElem.textContent = `${progress}%`;
       }
 
-      this.absoluteHeading = 0;
-      this.absoluteTilt = 0;
-      this.positionHistory = [];
-      this.gyroAbsoluteActive = true;
-      if (this.gyroAbsBtn) this.gyroAbsBtn.style.background = "#666";
+      this.bounds.minY = Math.min(this.bounds.minY, this.orientation.y);
+      this.bounds.maxY = Math.max(this.bounds.maxY, this.orientation.y);
+
+      let dMin = this.orientation.x - this.bounds.minX;
+      if (dMin > 180) dMin -= 360;
+      if (dMin < -180) dMin += 360;
+      if (dMin < 0) this.bounds.minX = this.orientation.x;
+
+      let dMax = this.orientation.x - this.bounds.maxX;
+      if (dMax > 180) dMax -= 360;
+      if (dMax < -180) dMax += 360;
+      if (dMax > 0) this.bounds.maxX = this.orientation.x;
+    }
+
+    finishCalibration() {
+      if (!this.calibrating) return;
+      clearTimeout(this.calTimer);
+      this.calibrating = false;
+      this.saveCalibration();
+      if (this.calibrateBtnElem) {
+        this.calibrateBtnElem.style.background = "var(--btn-dark)";
+        this.calibrateBtnElem.style.color = "var(--text-color)";
+        if (this.originalCalibrateBtnIcon) {
+          this.calibrateBtnElem.innerHTML = "";
+          const icon = document.createElement("span");
+          icon.className = "icon-placeholder";
+          icon.textContent = this.originalCalibrateBtnIcon;
+          icon.style.pointerEvents = "none";
+          this.calibrateBtnElem.appendChild(icon);
+        }
+      }
+      navigator.vibrate?.(100);
     }
   }
 
-
-  // -------------------------------------------------------------------------
-  // 3. TouchpadHandler Class (Übernommen aus touchpad-handler.js)
-  // -------------------------------------------------------------------------
+  // ==========================================
+  // 3. TouchpadHandler Class
+  // ==========================================
   class TouchpadHandler {
     constructor(serviceManager, gyroHandler, config) {
       this.serviceManager = serviceManager;
@@ -495,16 +632,11 @@ const char* INDEX_HTML = R"rawliteral(
       
       this.floatDX = 0;
       this.floatDY = 0;
-      this.dragging = false;
-      this.doubleTapDragging = false;
-      this.waitingForSecondTap = false;
       
-      // Constants
-      this.TOUCH_GAIN = config.touch_gain ?? 1.8;
-      this.TAP_THRESHOLD = 200;
-      this.HOLD_THRESHOLD = 500;
-      this.DOUBLE_TAP_THRESHOLD = 300;
-      this.DOUBLE_CLICK_DELAY = 50;
+      this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
+      this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
+      this.CLICK_DELAY = config.double_click_time ?? 250;
+      this.HOLD_TIME = config.hold_time ?? 500;           
       
       this.startFrameLoop();
     }
@@ -513,13 +645,11 @@ const char* INDEX_HTML = R"rawliteral(
       const frameLoop = () => {
         const dx = this.floatDX > 0 ? Math.floor(this.floatDX) : Math.ceil(this.floatDX);
         const dy = this.floatDY > 0 ? Math.floor(this.floatDY) : Math.ceil(this.floatDY);
-
         if (dx !== 0 || dy !== 0) {
           this.floatDX -= dx;
           this.floatDY -= dy;
           this.serviceManager.sendMove(dx, dy);
         }
-
         requestAnimationFrame(frameLoop);
       };
       requestAnimationFrame(frameLoop);
@@ -531,43 +661,49 @@ const char* INDEX_HTML = R"rawliteral(
     }
 
     setupPad(pad) {
+      let tapCount = 0;
+      let clickTimer = null;
+      let holdTimer = null;
+      let isDragging = false;
+      let dragActive = false;
+      let rightClickDone = false;
       let lastX = 0;
       let lastY = 0;
-      let touchStartTime = 0;
-      let lastTapTime = 0;
-      let holdTimer = null;
-      let singleTapTimer = null;
 
       const startTouch = (e) => {
         e.preventDefault();
-        
-        // Immediately suppress gyro
         this.gyroHandler.setGyroSuppression(400);
         
         const touch = e.touches[0];
         lastX = touch.clientX;
         lastY = touch.clientY;
-        touchStartTime = Date.now();
+        
+        isDragging = false;
+        rightClickDone = false;
 
-        const timeSinceLastTap = Date.now() - lastTapTime;
-
-        if (this.waitingForSecondTap && timeSinceLastTap < this.DOUBLE_TAP_THRESHOLD) {
-          clearTimeout(singleTapTimer);
-          this.waitingForSecondTap = false;
-          this.doubleTapDragging = true;
-          this.serviceManager.sendButton("left", "down");
-          navigator.vibrate?.(30);
-          return;
+        if (clickTimer) {
+          clearTimeout(clickTimer);
+          clickTimer = null;
+          tapCount++;
+        } else {
+          tapCount = 1;
         }
 
         holdTimer = setTimeout(() => {
-          if (!this.dragging && !this.doubleTapDragging) {
+          if (isDragging) return;
+
+          if (tapCount === 1) {
             this.serviceManager.sendButton("right", "click");
             navigator.vibrate?.(50);
-            this.waitingForSecondTap = false;
-            clearTimeout(singleTapTimer);
+            rightClickDone = true;
+          } else {
+            if (!dragActive) {
+              this.serviceManager.sendButton("left", "down");
+              dragActive = true;
+              navigator.vibrate?.(30);
+            }
           }
-        }, this.HOLD_THRESHOLD);
+        }, this.HOLD_TIME);
       };
 
       const moveTouch = (e) => {
@@ -575,15 +711,18 @@ const char* INDEX_HTML = R"rawliteral(
         const touch = e.touches[0];
         const dx = touch.clientX - lastX;
         const dy = touch.clientY - lastY;
-
-        if (!this.dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-          clearTimeout(holdTimer);
-          this.dragging = true;
-          this.waitingForSecondTap = false;
-          clearTimeout(singleTapTimer);
+        
+        if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          isDragging = true;
+          if (tapCount === 1) clearTimeout(holdTimer);
+          if (tapCount > 1 && !dragActive) {
+              clearTimeout(holdTimer);
+              this.serviceManager.sendButton("left", "down");
+              dragActive = true;
+          }
         }
 
-        if (this.dragging || this.doubleTapDragging) {
+        if (isDragging) {
           lastX = touch.clientX;
           lastY = touch.clientY;
           this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
@@ -594,45 +733,32 @@ const char* INDEX_HTML = R"rawliteral(
         e.preventDefault();
         clearTimeout(holdTimer);
 
-        const touchDuration = Date.now() - touchStartTime;
-        const timeSinceLastTap = Date.now() - lastTapTime;
-
-        if (this.doubleTapDragging) {
+        if (dragActive) {
           this.serviceManager.sendButton("left", "up");
-          this.doubleTapDragging = false;
-          this.dragging = false;
+          dragActive = false;
+          tapCount = 0; 
           return;
         }
 
-        if (!this.dragging && touchDuration < this.TAP_THRESHOLD) {
-          const now = Date.now();
-          
-          if (this.waitingForSecondTap && timeSinceLastTap < this.DOUBLE_TAP_THRESHOLD) {
-            clearTimeout(singleTapTimer);
-            this.waitingForSecondTap = false;
-            
-            this.serviceManager.sendButton("left", "click");
-            setTimeout(() => {
-              this.serviceManager.sendButton("left", "click");
-            }, this.DOUBLE_CLICK_DELAY);
-            
-            navigator.vibrate?.(40);
-            lastTapTime = 0;
-          } else {
-            lastTapTime = now;
-            this.waitingForSecondTap = true;
-            
-            singleTapTimer = setTimeout(() => {
-              if (this.waitingForSecondTap) {
-                this.serviceManager.sendButton("left", "click");
-                navigator.vibrate?.(20);
-                this.waitingForSecondTap = false;
-              }
-            }, this.DOUBLE_TAP_THRESHOLD);
-          }
+        if (rightClickDone) {
+          tapCount = 0;
+          return;
         }
 
-        this.dragging = false;
+        if (tapCount === 1 && isDragging) {
+          tapCount = 0;
+          return;
+        }
+
+        clickTimer = setTimeout(() => {
+          for (let i = 0; i < tapCount; i++) {
+              setTimeout(() => {
+                  this.serviceManager.sendButton("left", "click");
+              }, i * 50); 
+          }
+          tapCount = 0;
+          clickTimer = null;
+        }, this.CLICK_DELAY);
       };
 
       pad.addEventListener("touchstart", startTouch, { passive: false });
@@ -655,17 +781,14 @@ const char* INDEX_HTML = R"rawliteral(
       const moveScroll = (e) => {
         if (!scrolling) return;
         e.preventDefault();
-
         const currentY = e.touches[0].clientY;
         const delta = lastY - currentY;
         lastY = currentY;
-
         accumulatedScroll += delta;
-
-        const scrollAmount = Math.floor(accumulatedScroll * 3);
+        const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
         if (Math.abs(scrollAmount) >= 1) {
           this.serviceManager.sendTouchpadScroll(scrollAmount);
-          accumulatedScroll -= scrollAmount / 3;
+          accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
         }
       };
 
@@ -685,52 +808,76 @@ const char* INDEX_HTML = R"rawliteral(
     }
   }
 
-
-  // -------------------------------------------------------------------------
-  // 4. UIBuilder Class (Übernommen aus ui-builder.js)
-  // -------------------------------------------------------------------------
+  // ==========================================
+  // 4. UIBuilder Class
+  // ==========================================
   class UIBuilder {
     constructor(config) {
       this.config = config;
+      
+      // Standalone text/unicode map for offline mdi: icons
+      this.iconMap = {
+        "mdi:chevron-up": "▲",
+        "mdi:chevron-down": "▼",
+        "mdi:ray-start-arrow": "↝",
+        "mdi:bullseye": "☉",
+        "mdi:border-radius": "⛶",
+        "mdi:volume-minus": "-",
+        "mdi:volume-plus": "+",
+        "mdi:keyboard": "⌨",
+        "mdi:arrow-right-thin": "→"
+      };
     }
 
     createRoot() {
       const root = document.createElement("div");
       Object.assign(root.style, {
-        background: "#1e1f22",
+        background: "var(--card-bg)",
         borderRadius: "14px",
-        border: "1px solid #2b2c2f",
-        color: "#fff",
-        userSelect: "none",
-        touchAction: "none",
+        border: "1px solid var(--border-color)",
+        color: "var(--text-color)",
         padding: "10px",
-        fontFamily: "Inter, sans-serif",
         boxSizing: "border-box",
+        boxShadow: "var(--box-shadow)"
       });
       return root;
     }
 
-    createButton(text, handler, fontSize = "13px") {
+    createButton(textOrIcon, handler, fontSize = "18px") {
       const btn = document.createElement("button");
-      btn.textContent = text;
-
       Object.assign(btn.style, {
+        display: "flex",              
+        alignItems: "center",
+        justifyContent: "center",
         padding: "10px 6px",
         borderRadius: "10px",
-        background: "#2b2c2f",
-        color: "#fff",
-        border: "1px solid #323337",
+        background: "var(--btn-dark)",
+        color: "var(--text-color)",
+        border: "1px solid var(--border-color)",
         fontSize: fontSize,
         cursor: "pointer",
-        transition: "background 0.15s",
+        transition: "background 0.15s, color 0.15s",
+        outline: "none",                        
+        webkitTapHighlightColor: "transparent", 
+        touchAction: "manipulation",            
+        overflow: "hidden"                      
       });
 
-      btn.addEventListener("pointerdown", () => {
-        btn.style.background = "#3a3b3f";
-      });
-      btn.addEventListener("pointerup", () => {
-        btn.style.background = "#2b2c2f";
-      });
+      if (textOrIcon.startsWith("mdi:")) {
+        const icon = document.createElement("span");
+        icon.className = "icon-placeholder";
+        icon.textContent = this.iconMap[textOrIcon] || "•";
+        icon.style.pointerEvents = "none";
+        icon.style.fontSize = fontSize;
+        btn.appendChild(icon);
+      } else {
+        btn.textContent = textOrIcon;
+      }
+
+      const setBg = (color) => { btn.style.background = color; };
+      btn.addEventListener("pointerdown", () => setBg("var(--btn-light)"));
+      btn.addEventListener("pointerup", () => setBg("var(--btn-dark)"));
+      btn.addEventListener("pointerleave", () => setBg("var(--btn-dark)"));
 
       if (handler) btn.addEventListener("click", handler);
       return btn;
@@ -743,19 +890,12 @@ const char* INDEX_HTML = R"rawliteral(
         alignItems: "center",
         justifyContent: "center",
         cursor: "crosshair",
-        background: "#1b1c1f",
       });
-
       const overlay = document.createElement("div");
       overlay.textContent = "Hover to control";
       Object.assign(overlay.style, {
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: "18px",
-        opacity: "0.5",
+        width: "100%", height: "100%", display: "flex", alignItems: "center",
+        justifyContent: "center", fontSize: "18px", opacity: "0.5",
       });
       root.appendChild(overlay);
 
@@ -763,52 +903,39 @@ const char* INDEX_HTML = R"rawliteral(
 
       const handleMouseMove = (e) => {
         if (!isActive) return;
-        const dx = e.movementX;
-        const dy = e.movementY;
+        const dx = e.movementX; const dy = e.movementY;
         if (dx || dy) serviceManager.sendMove(dx, dy);
       };
-
       const btnMap = { 0: "left", 1: "middle", 2: "right" };
-
       root.addEventListener("mouseenter", () => {
-        isActive = true;
-        overlay.textContent = "Controlling (ESC to release)";
-        root.style.background = "#232427";
+        isActive = true; overlay.textContent = "Controlling (ESC to release)";
+        root.style.background = "var(--trackpad-bg)";
       });
-
       root.addEventListener("mouseleave", () => {
-        isActive = false;
-        overlay.textContent = "Hover to control";
-        root.style.background = "#1b1c1f";
+        isActive = false; overlay.textContent = "Hover to control";
+        root.style.background = "var(--card-bg)";
       });
-
       root.addEventListener("mousemove", handleMouseMove);
       root.addEventListener("mousedown", (e) => {
-        if (!isActive) return;
-        e.preventDefault();
+        if (!isActive) return; e.preventDefault();
         serviceManager.sendButton(btnMap[e.button] || "left", "down");
       });
       root.addEventListener("mouseup", (e) => {
-        if (!isActive) return;
-        e.preventDefault();
+        if (!isActive) return; e.preventDefault();
         serviceManager.sendButton(btnMap[e.button] || "left", "up");
       });
       root.addEventListener("wheel", (e) => {
-        if (!isActive) return;
-        e.preventDefault();
+        if (!isActive) return; e.preventDefault();
         serviceManager.sendScrollWheel(Math.sign(e.deltaY) * -1);
       }, { passive: false });
-
       root.tabIndex = 0;
       root.addEventListener("keydown", (e) => {
-        if (!isActive) return;
-        e.preventDefault();
+        if (!isActive) return; e.preventDefault();
         const key = this.getHIDKeycode(e.key, e.code);
         if (key) serviceManager.sendKey(key, "press");
       });
       root.addEventListener("keyup", (e) => {
-        if (!isActive) return;
-        e.preventDefault();
+        if (!isActive) return; e.preventDefault();
         const key = this.getHIDKeycode(e.key, e.code);
         if (key) serviceManager.sendKey(key, "release");
       });
@@ -816,330 +943,297 @@ const char* INDEX_HTML = R"rawliteral(
 
     setupMobileLayout(root, touchpadHandler, gyroHandler) {
       let expanded = false;
-
       const updateLayout = () => {
         expandedArea.style.display = expanded ? "flex" : "none";
-        // FIX: Ersetze problematisches Symbol ⮟ (Collapse) durch ▼
-        expandBtn.textContent = expanded ? "▼" : "▲"; 
+        expandBtn.innerHTML = "";
+        const icon = document.createElement("span");
+        icon.className = "icon-placeholder";
+        icon.textContent = expanded ? this.iconMap["mdi:chevron-down"] : this.iconMap["mdi:chevron-up"];
+        icon.style.pointerEvents = "none";
+        icon.style.fontSize = "14px";
+        expandBtn.appendChild(icon);
       };
 
-      Object.assign(root.style, {
-        display: "flex",
-        flexDirection: "column",
-      });
+      Object.assign(root.style, { display: "flex", flexDirection: "column" });
 
-      // TRACKPAD + SCROLLBAR ----------------------------------------------------
       const topArea = document.createElement("div");
       Object.assign(topArea.style, {
-        display: "flex",
-        height: "220px",
-        width: "100%",
-        borderRadius: "10px",
-        overflow: "hidden",
+        display: "flex", height: "220px", width: "100%",
+        borderRadius: "10px", overflow: "hidden",
+        border: "1px solid var(--border-color)",
       });
 
       const pad = document.createElement("div");
       Object.assign(pad.style, {
-        flex: "1",
-        background: "#2a2b2e",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: "15px",
+        flex: "1", background: "var(--trackpad-bg)", display: "flex",
+        alignItems: "center", justifyContent: "center", fontSize: "15px", touchAction: "none", 
       });
       pad.textContent = "Touchpad";
 
       const divider = document.createElement("div");
-      Object.assign(divider.style, {
-        width: "1px",
-        background: "#3a3b3d",
-      });
+      Object.assign(divider.style, { width: "1px", background: "var(--divider)" });
 
       const scrollArea = document.createElement("div");
       Object.assign(scrollArea.style, {
-        width: "56px",
-        background: "#2a2b2e",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: "18px",
-        userSelect: "none",
+        width: "56px", background: "var(--trackpad-bg)", display: "flex",
+        alignItems: "center", justifyContent: "center", fontSize: "18px", touchAction: "none",
       });
       scrollArea.textContent = "☰";
 
-      topArea.appendChild(pad);
-      topArea.appendChild(divider);
-      topArea.appendChild(scrollArea);
+      topArea.appendChild(pad); topArea.appendChild(divider); topArea.appendChild(scrollArea);
       root.appendChild(topArea);
 
-      // BUTTON ROW --------------------------------------------------------------
       const buttonRow1 = document.createElement("div");
       Object.assign(buttonRow1.style, {
-        display: "grid",
-        gridTemplateColumns: "repeat(6, 1fr)",
-        gap: "6px",
-        marginTop: "10px",
+        display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px", marginTop: "10px",
       });
 
-      // FIX: Setze das Startsymbol auf ▲ (Expand)
-      const expandBtn = this.createButton("▲"); 
-      const gyroRelBtn = this.createButton("↝", () => gyroHandler.toggleGyroRelative());
-      const gyroAbsBtn = this.createButton("☉", () => gyroHandler.toggleGyroAbsolute());
-      const calibrateBtn = this.createButton("⛶");
-      const volDownBtn = this.createButton("-");
-      const volUpBtn = this.createButton("+");
+      const expandBtn = this.createButton("mdi:chevron-up", null, "14px"); 
+      const gyroRelBtn = this.createButton("mdi:ray-start-arrow", () => {
+          gyroHandler.toggleGyroRelative().then(() => {
+              if (gyroHandler.gyroRelativeActive) {
+                  gyroRelBtn.style.background = "var(--primary)";
+                  gyroRelBtn.style.color = "#fff";
+              } else {
+                  gyroRelBtn.style.background = "var(--btn-dark)";
+                  gyroRelBtn.style.color = "var(--text-color)";
+              }
+          });
+      });
+      const gyroAbsBtn = this.createButton("mdi:bullseye", () => {
+          gyroHandler.toggleGyroAbsolute().then(() => {
+              if (gyroHandler.gyroAbsoluteActive) {
+                  gyroAbsBtn.style.background = "var(--primary)";
+                  gyroAbsBtn.style.color = "#fff";
+              } else {
+                  gyroAbsBtn.style.background = "var(--btn-dark)";
+                  gyroAbsBtn.style.color = "var(--text-color)";
+              }
+          });
+      });
+      const calibrateBtn = this.createButton("mdi:border-radius", () => {
+          if (gyroHandler.calibrating) gyroHandler.finishCalibration();
+          else if (gyroHandler.gyroAbsoluteActive) gyroHandler.recenter();
+          else gyroHandler.startCalibration(calibrateBtn);
+      }); 
+      const volDownBtn = this.createButton("mdi:volume-minus");
+      const volUpBtn = this.createButton("mdi:volume-plus");
 
       gyroHandler.gyroRelBtn = gyroRelBtn;
       gyroHandler.gyroAbsBtn = gyroAbsBtn;
+      if (gyroHandler.isCalibrated) calibrateBtn.style.background = "var(--btn-dark)";
 
       const volHandler = (btn, code) => {
-        // Pointer Events für die Volume-Tasten
-        btn.addEventListener("pointerdown", (e) => {
-          e.preventDefault();
-          touchpadHandler.serviceManager.sendMediaKey(code, "press");
-          btn.style.background = "#3a3b3f"; 
+        btn.addEventListener("touchstart", (e) => {
+          e.preventDefault(); touchpadHandler.serviceManager.sendMediaKey(code, "press");
         });
-        btn.addEventListener("pointerup", (e) => {
-          e.preventDefault();
-          touchpadHandler.serviceManager.sendMediaKey(code, "release");
-          btn.style.background = "#2b2c2f"; 
+        btn.addEventListener("touchend", (e) => {
+          e.preventDefault(); touchpadHandler.serviceManager.sendMediaKey(code, "release");
         });
-        btn.addEventListener("pointercancel", (e) => {
-          e.preventDefault();
-          touchpadHandler.serviceManager.sendMediaKey(code, "release");
+        btn.addEventListener("touchcancel", (e) => {
+          e.preventDefault(); touchpadHandler.serviceManager.sendMediaKey(code, "release");
         });
       };
-
-      volHandler(volDownBtn, 0xEA); // Volume Down (HID Consumer Code)
-      volHandler(volUpBtn, 0xE9);   // Volume Up (HID Consumer Code)
+      volHandler(volDownBtn, 0xEA); volHandler(volUpBtn, 0xE9);
 
       buttonRow1.append(expandBtn, gyroRelBtn, gyroAbsBtn, calibrateBtn, volDownBtn, volUpBtn);
       root.appendChild(buttonRow1);
 
-      // EXPANDED AREA -----------------------------------------------------------
       const expandedArea = document.createElement("div");
       Object.assign(expandedArea.style, {
-        display: "none",
-        flexDirection: "column",
-        gap: "10px",
-        marginTop: "10px",
+        display: "none", flexDirection: "column", gap: "10px", marginTop: "10px",
       });
-
       expandBtn.addEventListener("click", () => {
-        expanded = !expanded;
-        updateLayout();
+        expanded = !expanded; updateLayout();
       });
 
-      calibrateBtn.addEventListener("click", () => {
-        if (gyroHandler.calibrating) return gyroHandler.finishCalibration();
-        if (gyroHandler.isCalibrated) {
-          gyroHandler.isCalibrated = false;
-          calibrateBtn.textContent = "⊕";
-          calibrateBtn.style.background = "#2b2c2f";
-          navigator.vibrate?.(50);
-          return;
-        }
-        gyroHandler.startCalibration(calibrateBtn);
-      });
-
-      // TEXT INPUT + SEND -------------------------------------------------------
       const textRow = document.createElement("div");
-      Object.assign(textRow.style, {
-        display: "flex",
-        gap: "6px",
-        alignItems: "center",
-      });
+      Object.assign(textRow.style, { display: "flex", gap: "6px", alignItems: "center" });
 
       const liveWrapper = document.createElement("div");
-      Object.assign(liveWrapper.style, {
-        position: "relative",
-        width: "50%",
-      });
-
+      Object.assign(liveWrapper.style, { position: "relative", width: "15%" });
+      
+      const ANCHOR = " "; 
+      this.lastInputValue = ANCHOR;
       const liveInput = document.createElement("input");
-      liveInput.type = "text";
-      liveInput.placeholder = "Live text";
+      liveInput.type = "password"; 
+      liveInput.autocomplete = "off"; liveInput.autocorrect = "off";
+      liveInput.autocapitalize = "off"; liveInput.spellcheck = false;
+      liveInput.value = ANCHOR;
+
       Object.assign(liveInput.style, {
-        width: "100%",
-        padding: "10px",
-        borderRadius: "10px",
-        background: "#2a2b2e",
-        border: "1px solid #323337",
-        color: "white",
-        fontSize: "14px",
-        position: "relative",
-        textAlign: "center"
+        width: "100%", padding: "10px", borderRadius: "10px",
+        background: "var(--trackpad-bg)", border: "1px solid var(--border-color)",
+        color: "transparent", fontSize: "14px", position: "relative",
+        paddingInline: "0", textAlign: "center"
       });
 
-      // Live text input (zum Abfangen von physischen Tasten)
-      liveInput.addEventListener("keydown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const mods = [];
-        if (e.shiftKey) mods.push(0xE1);
-        if (e.ctrlKey) mods.push(0xE0);
-        if (e.altKey) mods.push(0xE2);
-
-        mods.forEach((m) => touchpadHandler.serviceManager.sendKey(m, "press"));
-        
-        const code = this.getHIDKeycodeFromCode(e.code, e.key);
-        if (code) {
-          touchpadHandler.serviceManager.sendKey(code, "send");
-        }
-        
-        mods.forEach((m) => touchpadHandler.serviceManager.sendKey(m, "release"));
-
-        setTimeout(() => {
-          liveInput.value = "";
-        }, 0);
+      const liveInputOverlay = document.createElement("div");
+      Object.assign(liveInputOverlay.style, {
+        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+        pointerEvents: "none", zIndex: "1", color: "var(--text-color)",
+        display: "flex", alignItems: "center", justifyContent: "center"
       });
+      const kbIcon = document.createElement("span");
+      kbIcon.textContent = this.iconMap["mdi:keyboard"];
+      kbIcon.style.fontSize = "18px"; 
+      liveInputOverlay.appendChild(kbIcon);
 
-      // Fallback for mobile keyboards (sendet Text zeichenweise)
+      liveWrapper.appendChild(liveInput); liveWrapper.appendChild(liveInputOverlay);
+
+      const ensureCursorAtEnd = () => {
+        try { const len = liveInput.value.length; liveInput.setSelectionRange(len, len); } catch(e){}
+      };
+      liveInput.addEventListener("focus", ensureCursorAtEnd);
+      liveInput.addEventListener("click", ensureCursorAtEnd);
+      liveInput.addEventListener("touchend", ensureCursorAtEnd);
+      
       liveInput.addEventListener("input", (e) => {
-        e.stopPropagation();
-        const text = liveInput.value;
-        if (text) {
-          touchpadHandler.serviceManager.sendText(text);
-          liveInput.value = "";
+        const val = liveInput.value;
+        const prev = this.lastInputValue;
+        const diff = val.length - prev.length;
+        
+        if (val.length < ANCHOR.length) {
+           touchpadHandler.serviceManager.sendKey(42, "send"); 
+           setTimeout(() => {
+               liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd();
+           }, 0);
+           return;
+        }
+        if (diff > 0) {
+            const added = val.slice(prev.length);
+            if (added) touchpadHandler.serviceManager.sendText(added);
+        } else if (diff < 0) {
+            const absDiff = Math.abs(diff);
+            for(let i=0; i<absDiff; i++) {
+              touchpadHandler.serviceManager.sendKey(42, "send");
+            }
+        }
+        this.lastInputValue = val;
+        if (val.length > 30) {
+            setTimeout(() => {
+                liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd();
+            }, 0);
+        }
+      });
+      
+      liveInput.addEventListener("blur", () => {
+          liveInput.value = ANCHOR; this.lastInputValue = ANCHOR;
+      });
+      liveInput.addEventListener("keydown", (e) => {
+        const specialKeys = ["Enter", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", 
+                              "Home", "End", "PageUp", "PageDown", "Delete", "Tab"];
+        if (specialKeys.includes(e.key)) {
+          e.preventDefault();
+          const code = this.getHIDKeycodeFromEvent(e);
+          if (code) touchpadHandler.serviceManager.sendKey(code, "send");
         }
       });
 
       const textInput = document.createElement("input");
-      textInput.type = "text";
-      textInput.placeholder = "Enter text...";
+      textInput.type = "text"; textInput.placeholder = "Enter text...";
       Object.assign(textInput.style, {
-        flex: "1",
-        padding: "10px",
-        borderRadius: "10px",
-        background: "#2a2b2e",
-        border: "1px solid #323337",
-        color: "#fff",
-        fontSize: "14px",
+        flex: "1", padding: "10px", borderRadius: "10px", background: "var(--trackpad-bg)",
+        border: "1px solid var(--border-color)", color: "var(--text-color)", fontSize: "14px",
       });
-
       textInput.addEventListener("keydown", (e) => e.stopPropagation());
       textInput.addEventListener("keyup", (e) => e.stopPropagation());
 
-      const sendTextBtn = this.createButton("→", () => {
+      const sendTextBtn = this.createButton("mdi:arrow-right-thin", () => {
         const text = textInput.value;
         if (text) {
-          touchpadHandler.serviceManager.sendText(text);
-          textInput.value = "";
-        }
-        else
-          // Wenn kein Text eingegeben wurde, sende "Enter" (40)
+          touchpadHandler.serviceManager.sendText(text); textInput.value = "";
+        } else {
           touchpadHandler.serviceManager.sendKey(40, "send");
+        }
       });
-      Object.assign(sendTextBtn.style, {
-        width: "15%",
-      });
+      Object.assign(sendTextBtn.style, { width: "15%" });
 
       textRow.append(liveWrapper, textInput, sendTextBtn);
       expandedArea.appendChild(textRow);
 
-      // MODIFIER KEYS -----------------------------------------------------------
       const modifierRow = document.createElement("div");
-      Object.assign(modifierRow.style, {
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: "8px",
-      });
-
+      Object.assign(modifierRow.style, { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" });
       const modifierState = { ctrl: false, alt: false, shift: false };
-
-      [
-        ["Ctrl", 0xE0],
-        ["Alt", 0xE2],
-        ["Shift", 0xE1],
-      ].forEach(([label, code]) => {
+      
+      [ ["Ctrl", 0xE0], ["Alt", 0xE2], ["Shift", 0xE1] ].forEach(([label, code]) => {
         const b = this.createButton(label, () => {
           const key = label.toLowerCase();
           modifierState[key] = !modifierState[key];
-          b.style.background = modifierState[key] ? "#3a3b3f" : "#2b2c2f";
+          if (modifierState[key]) {
+              b.style.background = "var(--primary)"; b.style.color = "#fff";
+          } else {
+              b.style.background = "var(--btn-dark)"; b.style.color = "var(--text-color)";
+          }
           touchpadHandler.serviceManager.sendKey(code, modifierState[key] ? "press" : "release");
         });
         modifierRow.appendChild(b);
       });
-
       const escBtn = this.createButton("ESC", () => {
         touchpadHandler.serviceManager.sendKey(41, "send");
         navigator.vibrate?.(30);
       });
       modifierRow.appendChild(escBtn);
-
       expandedArea.appendChild(modifierRow);
-      root.appendChild(expandedArea);
 
+      if (this.config.debug) {
+          const debugRow = document.createElement("div");
+          Object.assign(debugRow.style, {
+              marginTop: "10px", padding: "8px", background: "rgba(0,0,0,0.1)",
+              borderRadius: "4px", fontFamily: "monospace", fontSize: "11px",
+              lineHeight: "1.4", color: "var(--text-muted)", whiteSpace: "pre-wrap",
+              textAlign: "left"
+          });
+          debugRow.textContent = "Waiting for sensor data...";
+          gyroHandler.debugElem = debugRow;
+          expandedArea.appendChild(debugRow);
+      }
+
+      root.appendChild(expandedArea);
       touchpadHandler.setupPad(pad);
       touchpadHandler.setupScrollArea(scrollArea);
     }
 
-    // Helper functions: getHIDKeycodeFromCode is missing in the uploaded ui-builder.js, 
-    // but the following functions are present and used:
-    
-    getHIDKeycodeFromCode(code, key) {
-      // Da die vollständige Implementierung von getHIDKeycodeFromCode fehlt (wurde in ui-builder.js nicht hochgeladen),
-      // muss ich annehmen, dass es existiert oder getHIDKeycode aufruft. 
-      // Basierend auf den uploadeaten nutze ich getHIDKeycode, um Konflikte zu vermeiden.
-      return this.getHIDKeycode(key, code);
-    }
-    
     getHIDKeycodeFromEvent(e) {
       const k = e.key;
-      if (k.length === 1) {
-        if (/[a-z]/.test(k)) return 4 + (k.charCodeAt(0) - 97);
-        if (/[A-Z]/.test(k)) return 4 + (k.charCodeAt(0) - 65);
-        if (/[1-9]/.test(k)) return 30 + (k.charCodeAt(0) - 49);
-        if (k === "0") return 39;
-      }
-
       const map = {
-        Enter: 40, Escape: 41, Backspace: 42, Tab: 43, " ": 44,
-        "-": 45, "=": 46, "[": 47, "]": 48, "\\": 49, ";": 51, "'": 52,
-        "`": 53, ",": 54, ".": 55, "/": 56,
+        Enter: 40, Escape: 41, Backspace: 42, Tab: 43,
         Delete: 76, Home: 74, End: 77, PageUp: 75, PageDown: 78,
-        ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
-        "!": 30, "@": 31, "#": 32, "$": 33, "%": 34, "^": 35, "&": 36, "*": 37,
-        "(": 38, ")": 39, "_": 45, "+": 46, "{": 47, "}": 48, "|": 49,
-        ":": 51, '"': 52, "~": 53, "<": 54, ">": 55, "?": 56
+        ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52
       };
       return map[k] || null;
     }
-
+    
     getHIDKeycode(key, code) {
       return this.getHIDKeycodeFromEvent({ key, code });
     }
   }
 
-
-  // -------------------------------------------------------------------------
-  // 5. Initialisierung und Ausführung
-  // -------------------------------------------------------------------------
+  // ==========================================
+  // 5. Initialization
+  // ==========================================
   window.addEventListener('load', () => {
-    // 1. Initialisierung des Service Managers
     const serviceManager = new ServiceManager();
-    
-    // 2. Konfiguration
     const config = {
-        touch_gain: 1.8,
-        gyro_gain_x: 32,
-        gyro_gain_y: 38,
-        gyro_speed_filter: 0.5,
+        mouseSensitivity: 1.8,
+        scrollSensitivity: 3.0,
+        gyroSensitivity: 8.0,
+        smoothing: 0.2,
+        suppression_offset: 20,
+        double_click_time: 250,
+        hold_time: 500,
+        debug: true // set to false to hide the debug panel
     };
 
-    // 3. Initialisierung der Handler
     const gyroHandler = new GyroHandler(serviceManager, config);
     const touchpadHandler = new TouchpadHandler(serviceManager, gyroHandler, config);
     gyroHandler.touchpadHandler = touchpadHandler;
 
     const uiBuilder = new UIBuilder(config);
     const rootElement = document.getElementById('root');
-    rootElement.innerHTML = ''; // Leeren des "Loading..." Textes
+    rootElement.innerHTML = ''; 
 
-    // 4. Layout-Erstellung (Standard ist mobil, wie die JS-Dateien andeuten)
     const isMobile = window.matchMedia("only screen and (max-width: 760px)").matches;
-    
     if (isMobile) {
         uiBuilder.setupMobileLayout(rootElement, touchpadHandler, gyroHandler);
     } else {

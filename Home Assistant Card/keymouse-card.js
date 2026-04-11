@@ -58,15 +58,15 @@ customElements.define("keymouse-card", KeyMouseCard);
 /*
 type: custom:keymouse-card
 # --- SENSITIVITY ---
-mouseSensitivity: 4        # Mouse speed multiplier (Default: 4.0)
+padSensitivity: 1.8        # Touchpad speed multiplier (Default: 1.8)
 scrollSensitivity: 3.0     # Scroll bar speed multiplier (Default: 3.0)
 gyroSensitivity: 1.2       # Gyro Relative speed multiplier (Default: 1.0)
 
 # --- SMOOTHING ---
 smoothing: 0.15            # 0.0 = Raw/Fast, 1.0 = Max Lag/Smooth (Default: 0.2)
-suppression_offset: 30     # time in ms to suppress additional mouse moves after a click (Default: 30)
 
 # --- TOUCH TIMING (Advanced) ---
+click_time: 200            # Max ms for a tap to register as a click (Default: 200)
 double_click_time: 300     # Max ms between taps for a double-click (Default: 300)
 hold_time: 500             # Time to hold before triggering Right Click (Default: 500)
 

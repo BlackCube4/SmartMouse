@@ -145,3 +145,6 @@ text_send:
       required: true
       selector:
         text:
+
+reset:
+  description: Reboots the ESP32 device.

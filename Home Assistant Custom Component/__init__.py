@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, CONF_PASSWORD
 
-PLATFORMS = ["binary_sensor", "sensor"]
+PLATFORMS = ["binary_sensor", "sensor", "button"]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,8 @@ OPCODE_SCROLL_END       = 0x53 # Touchpad scroll end
 MOUSE_LEFT_BUTTON       = 0x01
 MOUSE_RIGHT_BUTTON      = 0x02
 MOUSE_MIDDLE_BUTTON     = 0x04
+
+OPCODE_SYSTEM_RESET     = 0xFE
 # -----------------------------------------------------------
 
 # --- SERVICE SCHEMAS ---
@@ -242,6 +244,14 @@ async def async_setup_entry(hass, entry: ConfigEntry):
         packet = struct.pack("<B", OPCODE_TEXT_SEND) + text.encode('utf-8') + b'\x00'
         await ws_link.send(packet, binary=True)
 
+    # 0xFE: SYSTEM RESET
+    async def handle_reset(call):
+        """Send a reboot command to the ESP32."""
+        _LOGGER.warning("Sending reset command to ESP Mouse at %s", host)
+        # Format: 0xFE (1 byte total)
+        packet = struct.pack("<B", OPCODE_SYSTEM_RESET)
+        await ws_link.send(packet, binary=True)
+
 
     # --- Register ALL Services ---
     # Using schemas makes these services safer and visible in HA's UI
@@ -254,6 +264,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     hass.services.async_register(DOMAIN, "key_control", handle_key_control, schema=SERVICE_KEY_SCHEMA)
     hass.services.async_register(DOMAIN, "media_control", handle_media_control, schema=SERVICE_MEDIA_SCHEMA)
     hass.services.async_register(DOMAIN, "text_send", handle_text_send, schema=SERVICE_TEXT_SCHEMA)
+    hass.services.async_register(DOMAIN, "reset", handle_reset)
 
     return True
 

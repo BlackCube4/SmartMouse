@@ -1,6 +1,3 @@
-WiFi setup page
-host own page with gui
-change desktop behavior so you click on a button and everything gets mirrored until you click ctr alt esc
-save last absolute gyro config
-Funktion to recenter absolute mouse
 Momentum based cursor for faster navigation on large screens
+add reset and connection indicator to ha card
+fix win button ´

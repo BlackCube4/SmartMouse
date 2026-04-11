@@ -7,6 +7,8 @@
 #include "USBHIDTouchpad.h"
 #include <WebServer.h>
 #include <Adafruit_NeoPixel.h>
+#include <Preferences.h>
+#include <DNSServer.h>
 #include "index_html.h"
 
 USBHIDKeyboardUTF8 keyboard;
@@ -17,6 +19,11 @@ USBHIDTouchpad touchpad;
 const char* ssid     = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const bool  test     = false;
+
+Preferences preferences;
+bool isAPMode = false;
+DNSServer dnsServer;
+IPAddress last_web_ip; // Stores the IP of the last client to load the web interface
 
 // Power Management
 unsigned long lastActivityTime = 0;
@@ -42,6 +49,44 @@ WebServer server(80);
 // Pin 48 is the addressable WS2812 RGB LED.
 #define RGB_LED_PIN 48
 
+// Update the HTML with a scanner and better CSS
+const char* WIFI_CONFIG_HTML = R"rawliteral(
+<!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KeyMouse WiFi Config</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: sans-serif; background: #121212; color: #eee; text-align: center; padding: 20px; margin: 0; overscroll-behavior: none; }
+  .card { background: #1e1f22; border: 1px solid #2b2c2f; padding: 20px; border-radius: 14px; display: block; width: calc(100% - 40px); max-width: 320px; text-align: left; margin: 20px auto; }
+  input, select { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #2a2b2e; color: #fff; font-size: 16px; }
+  button { width: 100%; padding: 12px; border-radius: 8px; border: none; background: #4a4; color: #fff; font-weight: bold; cursor: pointer; margin-top: 10px; }
+  a { color: #4a9eff; text-decoration: none; font-size: 0.9em; display: block; text-align: center; margin-top: 15px; }
+  .tip { font-size: 0.8em; color: #888; margin-top: 20px; line-height: 1.4; padding: 0 10px; }
+</style></head><body onload="scan()">
+<div class="card">
+  <h2 style="text-align:center">WiFi Setup</h2>
+  <form action="/save" method="POST">
+    <label>Available Networks:</label>
+    <select id="s" onchange="document.getElementById('ssid').value=this.value"><option>Scanning...</option></select>
+    <label>SSID:</label><input id="ssid" name="ssid" type="text" required placeholder="Network Name">
+    <label>Password:</label><input name="pass" type="password" placeholder="Password">
+    <button type="submit">Save & Restart</button>
+  </form>
+  <a href="http://192.168.4.1" target="_blank" style="font-weight:bold; font-size: 1em;">Open Controller</a>
+</div>
+<div class="tip">
+  <b>Important:</b> To use the Gyro/Mouse, do not use this "Log In" window. <br><br>
+  Tap the ⋮ menu and select <b>"Use network as is"</b> or <b>"Open in Chrome"</b>, 
+  then go to: <code style="background:#000; padding:2px 4px;">http://192.168.4.1</code>
+</div>
+<script>
+function scan() {
+  fetch('/scan').then(r => r.json()).then(data => {
+    let s = document.getElementById('s'); s.innerHTML = '';
+    data.forEach(n => { let o = document.createElement('option'); o.value = n; o.text = n; s.appendChild(o); });
+  });
+}
+</script></body></html>)rawliteral";
+
 // Initialize the NeoPixel object: 1 pixel on pin 48
 Adafruit_NeoPixel statusLED(1, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -53,14 +98,14 @@ void wakeUp() {
   
   if (!isPowerSaving) return;
   setCpuFrequencyMhz(240);
-  WiFi.setSleep(false);
+  if (!isAPMode) WiFi.setSleep(false);
   isPowerSaving = false;
   Serial.println("System: Waking up to High Performance mode.");
 }
 
 void enterPowerSaving() {
   if (isPowerSaving) return;
-  WiFi.setSleep(true);   // Enable modem sleep to save radio power
+  if (!isAPMode) WiFi.setSleep(true);   // Enable modem sleep to save radio power
   setCpuFrequencyMhz(80); // Drop clock speed to reduce thermal output
   isPowerSaving = true;
   Serial.println("System: Entering Power Saving (Inactivity).");
@@ -70,7 +115,45 @@ void enterPowerSaving() {
 void handleRoot() {
   wakeUp();
   lastActivityTime = millis();
+  last_web_ip = server.client().remoteIP(); // Trust this IP for WebSocket commands
   server.send(200, "text/html", INDEX_HTML);
+}
+
+void handleWifiConfig() {
+  server.send(200, "text/html", WIFI_CONFIG_HTML);
+}
+
+void handleScan() {
+  int n = WiFi.scanNetworks();
+  String json = "[";
+  for (int i = 0; i < n; ++i) {
+    json += "\"" + WiFi.SSID(i) + "\"";
+    if (i < n - 1) json += ",";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+void handleCaptive() {
+  server.sendHeader("Location", "/wifi", true);
+  server.send(302, "text/plain", "");
+}
+
+void handleSaveConfig() {
+  String nSSID = server.arg("ssid");
+  String nPass = server.arg("pass");
+  
+  if (nSSID.length() > 0) {
+    preferences.begin("wifi", false);
+    preferences.putString("ssid", nSSID);
+    preferences.putString("pass", nPass);
+    preferences.end();
+    server.send(200, "text/plain", "Credentials saved. Rebooting...");
+    delay(2000);
+    ESP.restart();
+  } else {
+    server.send(400, "text/plain", "SSID required");
+  }
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
@@ -101,6 +184,11 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   }
 
   // Ignore everything else until auth is done
+  // BYPASS: If in AP mode (protected by AP password) or if client matches the web requester's IP
+  if (isAPMode || wsServer.remoteIP(num) == last_web_ip) {
+    client_authenticated = true;
+  }
+
   if (!client_authenticated) return;
 
   switch (cmd) {
@@ -222,6 +310,12 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
       touchpad.scrollEnd();
       break;
     }
+    case 0xFE: {
+      Serial.println("System: Reset command received. Rebooting...");
+      delay(500); // Give time for Serial to print
+      ESP.restart();
+      break;
+    }
     default: {
       // if (Serial.availableForWrite() > 32) {
       //   Serial.printf("Unknown command: 0x%02X\n", cmd);
@@ -247,22 +341,45 @@ void setup() {
   media.begin();
   touchpad.begin();
 
-  // WiFi Connection - already exists
-  WiFi.begin(ssid, password);
-  WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
+  // WiFi Connection with AP Fallback
+  preferences.begin("wifi", false);
+  String storedSSID = preferences.getString("ssid", ssid);
+  String storedPass = preferences.getString("pass", password);
+  preferences.end();
+
+  WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+  Serial.print("Connecting to WiFi");
+  
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+    delay(500);
+    Serial.print(".");
   }
 
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nWiFi Failed. Starting Access Point: KeyMouse-Setup");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("KeyMouse-Setup", "KeyMouse123"); // Set your AP password here
+    isAPMode = true;
+    dnsServer.start(53, "*", WiFi.softAPIP()); // Redirect all DNS to local IP
+    Serial.print("AP IP Address: ");
+    Serial.println(WiFi.softAPIP());
+  } else {
+    Serial.println("\nWiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+    WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
+  }
 
   lastTelemetryTime = millis();
   lastActivityTime = millis();
 
   // NEW: Initialize Web Server
   server.on("/", HTTP_GET, handleRoot); // Handle the root path to serve the HTML
+  server.on("/wifi", HTTP_GET, handleWifiConfig);
+  server.on("/save", HTTP_POST, handleSaveConfig);
+  server.on("/scan", HTTP_GET, handleScan);
+  server.onNotFound(handleCaptive); // Capture portal redirect
   server.begin(); // Start the HTTP server on port 80
 
   // WebSocket setup - already exists
@@ -369,6 +486,7 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  if (isAPMode) dnsServer.processNextRequest();
   wsServer.loop();
 
   // Periodic Telemetry and Thermal Check (Every 10 seconds)

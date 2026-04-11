@@ -111,23 +111,18 @@ export class UIBuilder {
     root.appendChild(decoyInput);
 
     const overlay = document.createElement("div");
-    overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Ctrl + Alt + Shift + Space</small>";
+    overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
     Object.assign(overlay.style, { textAlign: "center", pointerEvents: "none", userSelect: "none" });
     root.appendChild(overlay);
 
     let isLocked = false;
-    let forceQuit = false;
 
     // --- KEYBOARD & ESC BLOCKING ---
     const handleKey = (e, mode) => {
       if (!isLocked) return;
       
-      // Updated Exit Sequence: Ctrl + Alt + Shift + Space
-      if (e.ctrlKey && e.altKey && e.shiftKey && e.code === 'Space') {
-        forceQuit = true;
-        document.exitPointerLock();
-        return;
-      }
+      // Allow Escape to propagate so the browser handles the native pointer unlock
+      if (e.key === 'Escape') return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -151,7 +146,7 @@ export class UIBuilder {
       const symbolMap = {
         Space: 44, Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48,
         Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, 
-        Period: 55, Slash: 56, CapsLock: 57, Tab: 43, Escape: 41
+        Period: 55, Slash: 56, CapsLock: 41, Tab: 43, Escape: 41
       };
       if (!hidCode) hidCode = symbolMap[e.code];
 
@@ -180,8 +175,7 @@ export class UIBuilder {
     const syncLockState = () => {
       if (document.pointerLockElement === root || document.pointerLockElement !== null) {
         isLocked = true;
-        forceQuit = false;
-        overlay.textContent = "System Locked. Ctrl+Alt+Shift+Space to Exit";
+        overlay.textContent = "System Locked. Escape to Exit";
         root.style.background = "var(--dark, #232427)";
         root.style.cursor = "none";
         decoyInput.focus();
@@ -191,13 +185,8 @@ export class UIBuilder {
         window.addEventListener("wheel", blockScroll, { passive: false });
         document.addEventListener("mousemove", onMove, { capture: true });
       } else {
-        if (!forceQuit) {
-          root.requestPointerLock();
-          return;
-        }
-
         isLocked = false;
-        overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Ctrl + Alt + Shift + Space</small>";
+        overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
         root.style.background = "var(--ha-card-background, #1e1f22)";
         root.style.cursor = "pointer";
         decoyInput.blur();
