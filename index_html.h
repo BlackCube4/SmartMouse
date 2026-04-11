@@ -48,6 +48,11 @@ const char* INDEX_HTML = R"rawliteral(
       transition: background-color 0.3s, color 0.3s;
       user-select: none;
       -webkit-user-select: none;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     
     #header-container {
@@ -94,6 +99,9 @@ const char* INDEX_HTML = R"rawliteral(
     #root {
       width: 100%;
       box-sizing: border-box;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
   </style>
 </head>
@@ -149,6 +157,19 @@ const char* INDEX_HTML = R"rawliteral(
           this.websocket.onmessage = this.onMessage.bind(this);
           this.websocket.onerror = this.onError.bind(this);
       }
+
+  sendReset() {
+      if (this.websocket && this.websocket.readyState === 1) {
+          // 1. Release all 8 HID modifier keys (0xE0 to 0xE7)
+          for (let code = 0xE0; code <= 0xE7; code++) {
+              this.sendKey(code, "release");
+          }
+          // 2. Trigger Hardware Restart
+          const buffer = new Uint8Array(1);
+          buffer[0] = 0xFE;
+          this.websocket.send(buffer);
+      }
+  }
       
       onOpen() { this.setStatus('connected'); }
       onClose() {
@@ -200,16 +221,24 @@ const char* INDEX_HTML = R"rawliteral(
           if (opcode) this.sendCmd(opcode, value);
       }
       
-      sendTouchpadScroll(amount) { this.sendScrollWheel(amount); }
-      
+      sendTouchpadScroll(amount) {
+          if (this.websocket && this.websocket.readyState === 1) {
+              if (amount === 0) {
+                  const buffer = new Uint8Array(1);
+                  buffer[0] = 0x53; // OPCODE_SCROLL_END
+                  this.websocket.send(buffer);
+              } else {
+                  const buffer = new ArrayBuffer(3);
+                  const view = new DataView(buffer);
+                  view.setUint8(0, 0x52); // OPCODE_SCROLL_TOUCHPAD
+                  view.setInt16(1, amount, true);
+                  this.websocket.send(buffer);
+              }
+          }
+      }
+
       sendScrollWheel(amount) {
-           if (this.websocket && this.websocket.readyState === 1) {
-              const buffer = new ArrayBuffer(3);
-              const view = new DataView(buffer);
-              view.setUint8(0, 0x51);
-              view.setInt16(1, amount, true);
-              this.websocket.send(buffer);
-           }
+          this.sendTouchpadScroll(amount);
       }
       
       sendMediaKey(code, state) {
@@ -233,13 +262,13 @@ const char* INDEX_HTML = R"rawliteral(
       
       sendText(text) {
           if (this.websocket && this.websocket.readyState === 1) {
-              const buffer = new ArrayBuffer(1 + text.length);
-              const view = new DataView(buffer);
-              view.setUint8(0, 0x41);
-              for (let i = 0; i < text.length; i++) {
-                  view.setUint8(1 + i, text.charCodeAt(i));
-              }
-              this.websocket.send(buffer);
+              const encoder = new TextEncoder();
+              const encodedText = encoder.encode(text);
+              const buffer = new Uint8Array(2 + encodedText.length);
+              buffer[0] = 0x41; // OPCODE_TEXT_SEND
+              buffer.set(encodedText, 1);
+              buffer[buffer.length - 1] = 0; // Null terminator
+              this.websocket.send(new Uint8Array(buffer).buffer);
           }
       }
   }
@@ -642,7 +671,7 @@ const char* INDEX_HTML = R"rawliteral(
       this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
       this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
       this.CLICK_DELAY = config.double_click_time ?? 250;
-      this.HOLD_TIME = config.hold_time ?? 500;           
+      this.HOLD_TIME = config.hold_time ?? 500;
       
       this.startFrameLoop();
     }
@@ -933,61 +962,145 @@ const char* INDEX_HTML = R"rawliteral(
     }
 
     setupDesktopLayout(root, serviceManager) {
+      let isLocked = false;
       Object.assign(root.style, {
-        height: "400px",
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        cursor: "crosshair",
+        cursor: "pointer",
+        position: "relative",
+        background: "var(--card-bg)",
+        transition: "background 0.3s",
+        overflow: "hidden"
       });
+
       const overlay = document.createElement("div");
-      overlay.textContent = "Hover to control";
+      overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
       Object.assign(overlay.style, {
-        width: "100%", height: "100%", display: "flex", alignItems: "center",
-        justifyContent: "center", fontSize: "18px", opacity: "0.5",
+        textAlign: "center", pointerEvents: "none", userSelect: "none"
       });
       root.appendChild(overlay);
 
-      let isActive = false;
+      const decoyInput = document.createElement("input");
+      decoyInput.type = "text";
+      Object.assign(decoyInput.style, { position: "absolute", opacity: 0, pointerEvents: "none", zIndex: -1 });
+      root.appendChild(decoyInput);
 
-      const handleMouseMove = (e) => {
-        if (!isActive) return;
-        const dx = e.movementX; const dy = e.movementY;
-        if (dx || dy) serviceManager.sendMove(dx, dy);
+      // Bind Reset to Status Dot for Desktop
+      const statusDot = document.getElementById('ws-status-dot');
+      if (statusDot) statusDot.addEventListener('mousedown', (e) => { e.stopPropagation(); serviceManager.sendReset(); });
+
+      const handleKey = (e, mode) => {
+        if (!isLocked) return;
+        
+        // Allow Escape to propagate for native browser unlock
+        if (e.key === 'Escape') return;
+
+        e.preventDefault();
+        e.stopPropagation(); e.stopImmediatePropagation();
+
+        if (mode === "press" && e.repeat) return;
+
+        let hidCode = this.getHIDKeycode(e.key, e.code);
+        
+        // Robust Dead Key / Composer Handling
+        const isDeadKey = e.key === "Dead" && (e.code === "Equal" || e.code === "Backquote");
+        if (isDeadKey || e.key === "´" || e.key === "´´") hidCode = 227; // Meta/Cmd mapping for dead key triggers
+
+        if (!hidCode && e.code.startsWith('Key')) hidCode = e.code.charCodeAt(3) - 65 + 4;
+        if (!hidCode && e.code.startsWith('Digit')) {
+          const d = parseInt(e.code.slice(-1));
+          hidCode = d === 0 ? 39 : d + 29;
+        }
+
+        const symbolMap = {
+          Space: 44, Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48,
+          Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, 
+          Period: 55, Slash: 56, CapsLock: 57, Tab: 43, Escape: 41
+        };
+        if (!hidCode) hidCode = symbolMap[e.code];
+
+        const modMap = { 
+          ControlLeft: 224, ShiftLeft: 225, AltLeft: 226, MetaLeft: 227, 
+          ControlRight: 228, ShiftRight: 229, AltRight: 230 
+        };
+        if (!hidCode) hidCode = modMap[e.code];
+
+        if (hidCode) serviceManager.sendKey(hidCode, mode);
       };
-      const btnMap = { 0: "left", 1: "middle", 2: "right" };
-      root.addEventListener("mouseenter", () => {
-        isActive = true; overlay.textContent = "Controlling (ESC to release)";
-        root.style.background = "var(--trackpad-bg)";
+
+      const onKeyDown = (e) => handleKey(e, "press");
+      const onKeyUp = (e) => handleKey(e, "release");
+      const blockScroll = (e) => { if (isLocked) e.preventDefault(); };
+      
+      const onPointerMove = (e) => {
+        if (isLocked && document.pointerLockElement) {
+          serviceManager.sendMove(e.movementX || 0, e.movementY || 0);
+        }
+      };
+
+      const syncLockState = () => {
+        if (document.pointerLockElement === root) {
+          isLocked = true;
+          overlay.textContent = "System Locked. Escape to Exit";
+          root.style.background = "var(--trackpad-bg)";
+          root.style.cursor = "none";
+          decoyInput.focus();
+          window.addEventListener("keydown", onKeyDown, true);
+          window.addEventListener("keyup", onKeyUp, true);
+          window.addEventListener("wheel", blockScroll, { passive: false });
+          document.addEventListener("pointermove", onPointerMove, { capture: true });
+        } else {
+          isLocked = false;
+          overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
+          root.style.background = "var(--card-bg)";
+          root.style.cursor = "pointer";
+          decoyInput.blur();
+          window.removeEventListener("keydown", onKeyDown, true);
+          window.removeEventListener("keyup", onKeyUp, true);
+          window.removeEventListener("wheel", blockScroll);
+          document.removeEventListener("pointermove", onPointerMove, { capture: true });
+        }
+      };
+
+      document.addEventListener("pointerlockchange", syncLockState);
+
+      root.addEventListener("pointerdown", (e) => {
+        if (!isLocked) {
+          root.requestPointerLock();
+          e.preventDefault();
+        } else {
+          const btnMap = { 0: "left", 1: "middle", 2: "right" };
+          const btnName = btnMap[e.button] || "left";
+          
+          serviceManager.sendButton(btnName, "down");
+          
+          // CRITICAL: Prevent OS from intercepting delta when mouse hits screen edge during drag
+          if (e.pointerId !== undefined) { 
+            try { root.releasePointerCapture(e.pointerId); } catch(err) {} 
+          }
+          e.preventDefault();
+        }
       });
-      root.addEventListener("mouseleave", () => {
-        isActive = false; overlay.textContent = "Hover to control";
-        root.style.background = "var(--card-bg)";
+
+      root.addEventListener("pointerup", (e) => {
+        if (isLocked) {
+          const btnMap = { 0: "left", 1: "middle", 2: "right" };
+          serviceManager.sendButton(btnMap[e.button] || "left", "up");
+          e.preventDefault();
+        }
       });
-      root.addEventListener("mousemove", handleMouseMove);
-      root.addEventListener("mousedown", (e) => {
-        if (!isActive) return; e.preventDefault();
-        serviceManager.sendButton(btnMap[e.button] || "left", "down");
-      });
-      root.addEventListener("mouseup", (e) => {
-        if (!isActive) return; e.preventDefault();
-        serviceManager.sendButton(btnMap[e.button] || "left", "up");
-      });
+
       root.addEventListener("wheel", (e) => {
-        if (!isActive) return; e.preventDefault();
+        if (!isLocked) return;
+        e.preventDefault();
         serviceManager.sendScrollWheel(Math.sign(e.deltaY) * -1);
       }, { passive: false });
-      root.tabIndex = 0;
-      root.addEventListener("keydown", (e) => {
-        if (!isActive) return; e.preventDefault();
-        const key = this.getHIDKeycode(e.key, e.code);
-        if (key) serviceManager.sendKey(key, "press");
-      });
-      root.addEventListener("keyup", (e) => {
-        if (!isActive) return; e.preventDefault();
-        const key = this.getHIDKeycode(e.key, e.code);
-        if (key) serviceManager.sendKey(key, "release");
-      });
+
+      root.addEventListener("auxclick", (e) => { if (isLocked) e.preventDefault(); });
+
+      root.addEventListener("contextmenu", (e) => { if (isLocked) e.preventDefault(); });
     }
 
     setupMobileLayout(root, touchpadHandler, gyroHandler) {
@@ -1215,16 +1328,16 @@ const char* INDEX_HTML = R"rawliteral(
               b.style.background = "var(--btn-dark)"; b.style.color = "var(--text-color)";
           }
           touchpadHandler.serviceManager.sendKey(code, modifierState[key] ? "press" : "release");
-        });
+        }, "14px");
         modifierRow.appendChild(b);
       });
       const escBtn = this.createButton("ESC", () => {
         touchpadHandler.serviceManager.sendKey(41, "send");
         navigator.vibrate?.(30);
-      });
+      }, "14px");
       modifierRow.appendChild(escBtn);
       expandedArea.appendChild(modifierRow);
-
+      
       if (this.config.debug) {
           const debugRow = document.createElement("div");
           Object.assign(debugRow.style, {
@@ -1285,6 +1398,14 @@ const char* INDEX_HTML = R"rawliteral(
     const isMobile = window.matchMedia("only screen and (max-width: 760px)").matches;
     if (isMobile) {
         uiBuilder.setupMobileLayout(rootElement, touchpadHandler, gyroHandler);
+        // Add Reset to Status Dot
+        const statusDot = document.getElementById('ws-status-dot');
+        if (statusDot) {
+            statusDot.style.cursor = "pointer";
+            statusDot.addEventListener('touchstart', (e) => {
+                serviceManager.sendReset();
+            });
+        }
     } else {
         uiBuilder.setupDesktopLayout(rootElement, serviceManager);
     }
