@@ -7,6 +7,12 @@ export class TouchpadHandler {
     this.floatDX = 0;
     this.floatDY = 0;
     
+    // Momentum state
+    this.velocityX = 0;
+    this.velocityY = 0;
+    this.lastTouchTime = 0;
+    this.isTouchActive = false;
+
     // --- CONFIGURATION ---
     this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
     this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
@@ -40,6 +46,30 @@ export class TouchpadHandler {
     this.floatDY += dy;
   }
 
+  runMomentum() {
+    const friction = 0.92; // Adjust for how long the slide lasts
+    const step = () => {
+      if (this.isTouchActive) return; // Cancel on new touch
+
+      // Velocity is px/ms. At 60fps, 1 frame is ~16.6ms.
+      const dx = this.velocityX * 16.6;
+      const dy = this.velocityY * 16.6;
+
+      // Stop when movement is negligible
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        this.velocityX = 0;
+        this.velocityY = 0;
+        return;
+      }
+
+      this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
+      this.velocityX *= friction;
+      this.velocityY *= friction;
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   setupPad(pad) {
     // State Machine Variables
     let tapCount = 0;           // Tracks 1, 2, 3... taps in a sequence
@@ -55,6 +85,10 @@ export class TouchpadHandler {
 
     const startTouch = (e) => {
       e.preventDefault();
+      this.isTouchActive = true;
+      this.velocityX = 0;
+      this.velocityY = 0;
+
       this.gyroHandler.setGyroSuppression(400); // Stop gyro interference
       
       const touch = e.touches[0];
@@ -99,8 +133,19 @@ export class TouchpadHandler {
     const moveTouch = (e) => {
       e.preventDefault();
       const touch = e.touches[0];
+      const now = performance.now();
+      const dt = now - this.lastTouchTime;
+
       const dx = touch.clientX - lastX;
       const dy = touch.clientY - lastY;
+
+      if (isDragging && dt > 0) {
+        // Calculate velocity (pixels per ms) and apply smoothing
+        const curVX = dx / dt;
+        const curVY = dy / dt;
+        this.velocityX = this.velocityX * 0.4 + curVX * 0.6;
+        this.velocityY = this.velocityY * 0.4 + curVY * 0.6;
+      }
 
       // Noise filter
       if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
@@ -124,11 +169,19 @@ export class TouchpadHandler {
         lastY = touch.clientY;
         this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
       }
+      this.lastTouchTime = now;
     };
 
     const endTouch = (e) => {
       e.preventDefault();
+      this.isTouchActive = false;
       clearTimeout(holdTimer);
+
+      const timeSinceLastMove = performance.now() - this.lastTouchTime;
+      // Trigger momentum if released while moving fast, but not during a drag/drop
+      if (isDragging && !dragActive && timeSinceLastMove < 50) {
+        this.runMomentum();
+      }
 
       // CASE A: Drag Active (Tap 2+ was held/dragged)
       if (dragActive) {

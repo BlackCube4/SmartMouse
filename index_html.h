@@ -633,6 +633,12 @@ const char* INDEX_HTML = R"rawliteral(
       this.floatDX = 0;
       this.floatDY = 0;
       
+      // Momentum state
+      this.velocityX = 0;
+      this.velocityY = 0;
+      this.lastTouchTime = 0;
+      this.isTouchActive = false;
+
       this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
       this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
       this.CLICK_DELAY = config.double_click_time ?? 250;
@@ -660,6 +666,28 @@ const char* INDEX_HTML = R"rawliteral(
       this.floatDY += dy;
     }
 
+    runMomentum() {
+      const friction = 0.92;
+      const step = () => {
+        if (this.isTouchActive) return; 
+
+        const dx = this.velocityX * 16.6;
+        const dy = this.velocityY * 16.6;
+
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+          this.velocityX = 0;
+          this.velocityY = 0;
+          return;
+        }
+
+        this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
+        this.velocityX *= friction;
+        this.velocityY *= friction;
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+
     setupPad(pad) {
       let tapCount = 0;
       let clickTimer = null;
@@ -672,6 +700,10 @@ const char* INDEX_HTML = R"rawliteral(
 
       const startTouch = (e) => {
         e.preventDefault();
+        this.isTouchActive = true;
+        this.velocityX = 0;
+        this.velocityY = 0;
+
         this.gyroHandler.setGyroSuppression(400);
         
         const touch = e.touches[0];
@@ -709,9 +741,19 @@ const char* INDEX_HTML = R"rawliteral(
       const moveTouch = (e) => {
         e.preventDefault();
         const touch = e.touches[0];
+        const now = performance.now();
+        const dt = now - this.lastTouchTime;
+
         const dx = touch.clientX - lastX;
         const dy = touch.clientY - lastY;
         
+        if (isDragging && dt > 0) {
+          const curVX = dx / dt;
+          const curVY = dy / dt;
+          this.velocityX = this.velocityX * 0.4 + curVX * 0.6;
+          this.velocityY = this.velocityY * 0.4 + curVY * 0.6;
+        }
+
         if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
           isDragging = true;
           if (tapCount === 1) clearTimeout(holdTimer);
@@ -727,11 +769,18 @@ const char* INDEX_HTML = R"rawliteral(
           lastY = touch.clientY;
           this.addMovement(dx * this.TOUCH_GAIN, dy * this.TOUCH_GAIN);
         }
+        this.lastTouchTime = now;
       };
 
       const endTouch = (e) => {
         e.preventDefault();
+        this.isTouchActive = false;
         clearTimeout(holdTimer);
+
+        const timeSinceLastMove = performance.now() - this.lastTouchTime;
+        if (isDragging && !dragActive && timeSinceLastMove < 50) {
+          this.runMomentum();
+        }
 
         if (dragActive) {
           this.serviceManager.sendButton("left", "up");
