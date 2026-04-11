@@ -1,4 +1,1 @@
-Momentum based cursor for faster navigation on large screens
-middle mouse button
 the controll site does not lock the mouse
-add chrome gyro compatibility
