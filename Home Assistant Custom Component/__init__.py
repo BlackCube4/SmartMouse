@@ -84,6 +84,8 @@ SERVICE_TEXT_SCHEMA = vol.Schema({
     vol.Required("text"): cv.string,
 })
 
+SERVICE_RESET_SCHEMA = vol.Schema({})
+
 SERVICE_MAP = {
     "move": (OPCODE_MOUSE_RELATIVE, "<Bhh", ["x", "y"]),
     "move_absolute": (OPCODE_MOUSE_ABSOLUTE, "<Bhh", ["x", "y"]),
@@ -246,12 +248,15 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
     # 0xFE: SYSTEM RESET
     async def handle_reset(call):
-        """Send a reboot command to the ESP32."""
-        _LOGGER.warning("Sending reset command to ESP Mouse at %s", host)
-        # Format: 0xFE (1 byte total)
+        """Release all modifiers and trigger ESP hardware reset."""
+        # 1. Release all 8 HID modifier keys (0xE0 to 0xE7 / 224 to 231)
+        for code in range(0xE0, 0xE8):
+            packet = struct.pack("<BB", OPCODE_KEY_RELEASE, code)
+            await ws_link.send(packet, binary=True)
+        
+        # 2. Trigger Hardware Restart on ESP
         packet = struct.pack("<B", OPCODE_SYSTEM_RESET)
         await ws_link.send(packet, binary=True)
-
 
     # --- Register ALL Services ---
     # Using schemas makes these services safer and visible in HA's UI
@@ -264,7 +269,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     hass.services.async_register(DOMAIN, "key_control", handle_key_control, schema=SERVICE_KEY_SCHEMA)
     hass.services.async_register(DOMAIN, "media_control", handle_media_control, schema=SERVICE_MEDIA_SCHEMA)
     hass.services.async_register(DOMAIN, "text_send", handle_text_send, schema=SERVICE_TEXT_SCHEMA)
-    hass.services.async_register(DOMAIN, "reset", handle_reset)
+    hass.services.async_register(DOMAIN, "reset", handle_reset, schema=SERVICE_RESET_SCHEMA)
 
     return True
 

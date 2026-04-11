@@ -21,6 +21,14 @@ class KeyMouseCard extends HTMLElement {
     if (this.serviceManager) {
       this.serviceManager.hass = hass;
     }
+
+    // Update connection indicator based on the binary_sensor status
+    if (this.uiBuilder && hass) {
+      // Attempt to find the status entity (naming convention from binary_sensor.py)
+      const entityId = Object.keys(hass.states).find(id => id.startsWith("binary_sensor.") && id.endsWith("_status"));
+      const isConnected = entityId ? hass.states[entityId].state === "on" : false;
+      this.uiBuilder.updateConnectionState(isConnected);
+    }
   }
 
   connectedCallback() {
@@ -42,7 +50,6 @@ class KeyMouseCard extends HTMLElement {
     if (isMobile) {
       this.uiBuilder.setupMobileLayout(root, this.touchpadHandler, this.gyroHandler);
     } else {
-      this.uiBuilder.setupDesktopLayout(root, this.serviceManager);
     }
 
     this.shadowRoot.appendChild(root);

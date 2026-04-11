@@ -8,6 +8,8 @@
 export class UIBuilder {
   constructor(config) {
     this.config = config;
+    this.statusIndicator = null;
+    this.statusWrap = null;
   }
 
   /**
@@ -28,6 +30,36 @@ export class UIBuilder {
       boxSizing: "border-box",
       boxShadow: "var(--ha-card-box-shadow)"
     });
+
+    // --- CONNECTION INDICATOR ---
+    const statusWrap = document.createElement("div");
+    Object.assign(statusWrap.style, {
+      position: "absolute",
+      top: "10px",
+      right: "10px",
+      display: "flex",
+      alignItems: "center",
+      gap: "5px",
+      zIndex: "20",
+      cursor: "pointer",
+      padding: "5px",
+      borderRadius: "50%",
+      webkitTapHighlightColor: "transparent"
+    });
+
+    this.statusIndicator = document.createElement("div");
+    Object.assign(this.statusIndicator.style, {
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      background: "var(--error-color, #e74c3c)",
+      transition: "background 0.3s"
+    });
+
+    statusWrap.appendChild(this.statusIndicator);
+    this.statusWrap = statusWrap;
+    root.appendChild(statusWrap);
+
     return root;
   }
 
@@ -91,9 +123,34 @@ export class UIBuilder {
     return btn;
   }
 
-  setupDesktopLayout(root, serviceManager) {
+  updateConnectionState(isConnected) {
+    if (this.statusIndicator) {
+      this.statusIndicator.style.background = isConnected 
+        ? "var(--success-color, #4caf50)" 
+        : "var(--error-color, #e74c3c)";
+    }
+  }
+
+  /**
+   * Performs a hardware reset via the service manager and recenters sensors locally.
+   */
+  _performReset(serviceManager, gyroHandler) {
+    // Directly trigger the Home Assistant button entity for hardware reset
+    if (serviceManager.hass) {
+      serviceManager.hass.callService("button", "press", {
+        entity_id: "button.esp32_mouse_restart"
+      });
+    }
+    
+    if (serviceManager.reset) serviceManager.reset(); // Still clear modifiers via websocket
+    if (gyroHandler) gyroHandler.recenter();
+    navigator.vibrate?.(50);
+  }
+
+  setupDesktopLayout(root, serviceManager, gyroHandler) {
     Object.assign(root.style, {
       height: "400px",
+      width: "100%",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -103,6 +160,12 @@ export class UIBuilder {
       backgroundColor: "var(--ha-card-background, #1e1f22)",
       transition: "background 0.3s",
       overflow: "hidden" // Keep everything contained
+    });
+
+    // Bind Reset to Indicator (preventing lock trigger)
+    this.statusWrap.addEventListener("pointerdown", (e) => {
+      e.stopPropagation(); 
+      this._performReset(serviceManager, gyroHandler);
     });
 
     const decoyInput = document.createElement("input");
@@ -130,10 +193,18 @@ export class UIBuilder {
 
       if (mode === "press" && e.repeat) return;
 
+      // --- DEBUGGING ---
+      if (this.config.debug) {
+        console.log(`KeyMouse Debug | Key: "${e.key}", Code: "${e.code}"`);
+      }
+
       let hidCode = this.getHIDKeycode(e.key, e.code);
       
-      // Check for the '´' key to act as Windows/Meta key (HID 227)
-      if (e.key === "´") {
+      // Capture all states of the '´' dead key to ensure it works every time
+      const isDeadKey = e.key === "Dead" && (e.code === "Equal" || e.code === "Backquote");
+      const isComposedKey = e.key === "´" || e.key === "´´";
+      
+      if (isDeadKey || isComposedKey) {
         hidCode = 227;
       }
 
@@ -163,7 +234,7 @@ export class UIBuilder {
     const onKeyUp = (e) => handleKey(e, "release");
     
     // --- MOUSE BINDING ---
-    const onMove = (e) => {
+    const onPointerMove = (e) => {
       if (isLocked && document.pointerLockElement) {
         serviceManager.sendMove(e.movementX || 0, e.movementY || 0);
       }
@@ -183,7 +254,7 @@ export class UIBuilder {
         window.addEventListener("keydown", onKeyDown, true);
         window.addEventListener("keyup", onKeyUp, true);
         window.addEventListener("wheel", blockScroll, { passive: false });
-        document.addEventListener("mousemove", onMove, { capture: true });
+        document.addEventListener("pointermove", onPointerMove, { capture: true });
       } else {
         isLocked = false;
         overlay.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
@@ -194,30 +265,50 @@ export class UIBuilder {
         window.removeEventListener("keydown", onKeyDown, true);
         window.removeEventListener("keyup", onKeyUp, true);
         window.removeEventListener("wheel", blockScroll);
-        document.removeEventListener("mousemove", onMove, { capture: true });
+        document.removeEventListener("pointermove", onPointerMove, { capture: true });
       }
     };
 
     document.addEventListener("pointerlockchange", syncLockState);
 
-    root.addEventListener("mousedown", (e) => {
+    root.addEventListener("pointerdown", (e) => {
       if (!isLocked) {
         root.requestPointerLock();
         e.preventDefault();
       } else {
+        // Standard MouseEvent.button: 0=Left, 1=Middle, 2=Right
         const btnMap = { 0: "left", 1: "middle", 2: "right" };
-        serviceManager.sendButton(btnMap[e.button] || "left", "down");
+        const btnName = btnMap[e.button] || "left";
+        
+        if (this.config.debug) {
+          console.log(`KeyMouse Debug | Mouse Button: ${e.button} (${btnName}) Mode: down`);
+        }
+
+        serviceManager.sendButton(btnName, "down");
+
+        // RELEASE POINTER CAPTURE: This is the fix. 
+        // It prevents the browser from "stealing" the pointer deltas during a drag.
+        try { root.releasePointerCapture(e.pointerId); } catch(err) {}
+
         e.preventDefault();
       }
     });
 
-    root.addEventListener("mouseup", (e) => {
+    root.addEventListener("pointerup", (e) => {
       if (isLocked) {
         const btnMap = { 0: "left", 1: "middle", 2: "right" };
+        
+        if (this.config.debug) {
+          console.log(`KeyMouse Debug | Mouse Button: ${e.button} (${btnMap[e.button]}) Mode: up`);
+        }
+
         serviceManager.sendButton(btnMap[e.button] || "left", "up");
         e.preventDefault();
       }
     });
+
+    // Prevent middle-click "autoscroll" icon from appearing
+    root.addEventListener("auxclick", (e) => { if (isLocked) e.preventDefault(); });
 
     root.addEventListener("wheel", (e) => {
       if (isLocked) {
@@ -304,7 +395,12 @@ export class UIBuilder {
       marginTop: "10px",
     });
 
-    const expandBtn = this.createButton("mdi:chevron-up"); //▲
+    const expandBtn = this.createButton("mdi:chevron-up"); 
+
+    // Bind Reset to Indicator for mobile
+    this.statusWrap.addEventListener("touchstart", (e) => {
+      this._performReset(touchpadHandler.serviceManager, gyroHandler);
+    });
     
     const gyroRelBtn = this.createButton("mdi:ray-start-arrow", () => { //↝
         gyroHandler.toggleGyroRelative().then(() => {

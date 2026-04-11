@@ -1,3 +1,4 @@
 Momentum based cursor for faster navigation on large screens
-add reset and connection indicator to ha card
-fix win button ´
+middle mouse button
+the controll site does not lock the mouse
+add chrome gyro compatibility
