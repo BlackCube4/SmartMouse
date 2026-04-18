@@ -110,7 +110,7 @@ void USBHIDMouse::move(int16_t x, int16_t y, int8_t wheel, int8_t pan) {
 // Absolute Movement (Positioning only)
 void USBHIDMouse::moveTo(int16_t x, int16_t y) {
   uint8_t report[5];
-  report[0] = 0;
+  report[0] = _buttons;
   report[1] = x & 0xFF;
   report[2] = (x >> 8) & 0xFF;
   report[3] = y & 0xFF;

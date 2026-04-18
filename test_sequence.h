@@ -60,25 +60,70 @@ void runTestSequence(USBHIDKeyboardUTF8 &keyboard, USBHIDMouse &mouse, USBHIDCon
     
     // ---------------------------------------
     // TEST 4: Touchpad Two-Finger Scroll
+    // (Vertical, Horizontal, Diagonal)
     // ---------------------------------------
-    Serial.println("TEST 4: Touchpad - Two-finger scroll down");
+    Serial.println("TEST 4a: Touchpad - Two-finger scroll down (vertical)");
     for (int i = 0; i < 30; i++) {
       touchpad.scroll(0, 25);
       delay(8);
     }
-    touchpad.scrollEnd(); 
+    touchpad.liftFingers(); 
     delay(2000);
-    
-    Serial.println("TEST 4b: Touchpad - Two-finger scroll up");
+
+    Serial.println("TEST 4b: Touchpad - Two-finger scroll up (vertical)");
     for (int i = 0; i < 30; i++) {
       touchpad.scroll(0, -25);
       delay(8);
     }
-    touchpad.scrollEnd(); 
+    touchpad.liftFingers(); 
+    delay(2000);
+
+    Serial.println("TEST 4c: Touchpad - Two-finger scroll right (horizontal)");
+    for (int i = 0; i < 30; i++) {
+      touchpad.scroll(25, 0);
+      delay(8);
+    }
+    touchpad.liftFingers(); 
+    delay(2000);
+
+    Serial.println("TEST 4c: Touchpad - Two-finger scroll left (horizontal)");
+    for (int i = 0; i < 30; i++) {
+      touchpad.scroll(-25, 0);
+      delay(8);
+    }
+    touchpad.liftFingers(); 
+    delay(2000);
+
+    Serial.println("TEST 4d: Touchpad - Two-finger scroll diagonal (down-right)");
+    for (int i = 0; i < 30; i++) {
+      touchpad.scroll(20, 20);
+      delay(8);
+
+    }
+    touchpad.liftFingers(); 
+    delay(2000);
+
+    // ---------------------------------------
+    // TEST 5: Touchpad Zoom
+    // ---------------------------------------
+    Serial.println("TEST 5a: Touchpad - Zoom In (spread fingers)");
+    for (int i = 0; i < 20; i++) {
+      touchpad.zoom(5); // Increase spacing
+      delay(12);
+    }
+    touchpad.liftFingers();
+    delay(2000);
+
+    Serial.println("TEST 5b: Touchpad - Zoom Out (pinch fingers)");
+    for (int i = 0; i < 20; i++) {
+      touchpad.zoom(-5); // Decrease spacing
+      delay(12);
+    }
+    touchpad.liftFingers();
     delay(2000);
     
     // ---------------------------------------
-    // TEST 5: Keyboard - Type text
+    // TEST 6: Keyboard - Type text
     // ---------------------------------------
     Serial.println("TEST 5: Keyboard - Type 'Hello'");
     keyboard.write("ABCxyz123äöü,.-+#!?$%&/(){}[]=ß<>*:;|");

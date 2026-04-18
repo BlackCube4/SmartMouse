@@ -15,6 +15,9 @@
 #define PHYSICAL_MAX_X 10500
 #define PHYSICAL_MAX_Y 6500
 
+// Default spacing between the two fingers in logical units
+#define FINGER_SPACING_DEFAULT 200
+
 // Windows Precision Touchpad Certification Blob (From UnifiedHID)
 static const uint8_t PTPHQA_BLOB[256] = {
   0xfc, 0x28, 0xfe, 0x84, 0x40, 0xcb, 0x9a, 0x87, 0x0d, 0xbe, 0x57, 0x3c, 0xb6, 0x70, 0x09, 0x88,
@@ -44,8 +47,9 @@ private:
   bool _fingers_down;
   uint16_t _current_x;
   uint16_t _current_y;
+  uint16_t _current_spacing;
 
-  void _sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos);
+  void _sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos, uint16_t spacing);
 
 public:
   USBHIDTouchpad();
@@ -54,7 +58,8 @@ public:
   
   // --- Scroll API ---
   void scroll(int16_t dx, int16_t dy);
-  void scrollEnd();
+  void zoom(int16_t delta);
+  void liftFingers();
   
   // --- USBHID Overrides ---
   uint16_t _onGetDescriptor(uint8_t *dst) override;

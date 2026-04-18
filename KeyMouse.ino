@@ -179,11 +179,28 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
     }
 
     // ---------------------------------------
+    // MOUSE BUTTON
+    // 0x03 → mouse down
+    // 0x04 → mouse up
+    // 0x05 → mouse click
+    // opcode | uint8 button
+    // ---------------------------------------
+    case 0x03:
+      mouse.press(payload[1]);
+      break;
+    case 0x04:
+      mouse.release(payload[1]);
+      break;
+    case 0x05:
+      mouse.click(payload[1]);
+      break;
+
+    // ---------------------------------------
     // KEYBOARD
     // 0x11 → key down
     // 0x12 → key up
     // 0x13 → key send
-    // payload: opcode | uint16 keycode (HID usage code)
+    // opcode | uint16 keycode (HID usage code)
     // ---------------------------------------
     case 0x11: {
       uint8_t key = payload[1];  // HID codes are 8-bit
@@ -203,41 +220,22 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
     }
 
     // ---------------------------------------
-    // MOUSE BUTTON
-    // 0x21 → mouse down
-    // 0x22 → mouse up
-    // 0x23 → mouse click
-    // payload: opcode | uint8 button
-    // ---------------------------------------
-    case 0x21:
-      mouse.press(payload[1]);
-      break;
-
-    case 0x22:
-      mouse.release(payload[1]);
-      break;
-
-    case 0x23:
-      mouse.click(payload[1]);
-      break;
-
-    // ---------------------------------------
     // MEDIA KEYS
-    // 0x31 → down
-    // 0x32 → up
-    // 0x33 → send
-    // payload: opcode | uint16 consumer_code
+    // 0x21 → down
+    // 0x22 → up
+    // 0x23 → send
+    // opcode | uint16 consumer_code
     // ---------------------------------------
-    case 0x31: {
+    case 0x21: {
       uint16_t code = payload[1] | (payload[2] << 8);
       media.press(code);
       break;
     }
-    case 0x32: {
+    case 0x22: {
       media.release();
       break;
     }
-    case 0x33: {
+    case 0x23: {
       uint16_t code = payload[1] | (payload[2] << 8);
       media.press(code);
       media.release();
@@ -246,44 +244,77 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
 
     // ---------------------------------------
     // TEXT SEND (string)
-    // 0x41 | raw utf8 text…
+    // 0x31 | raw utf8 text…
     // ---------------------------------------
-    case 0x41: {
+    case 0x31: {
       keyboard.write((const char*)&payload[1]);
       break;
     }
 
     // ---------------------------------------
-    // SCROLLING
-    // 0x51 → low res scroll (int16 steps)
-    // 0x52 → high res scroll (int16 steps)
-    // 0x52 → high res scroll end ()
-    // payload: opcode | int16 value
+    // MOUSE SCROLLING
+    // 0x41 → low res scroll (int8 steps)
+    // 0x41 | int8 steps
     // ---------------------------------------
-    case 0x51: {
-      int16_t steps = payload[1] | (payload[2] << 8);
+    case 0x41: {
+      int8_t steps = payload[1];
       mouse.move(0, 0, steps);
       break;
     }
-    case 0x52: {
+
+    // ---------------------------------------
+    // TOUCHPAD SCROLLING
+    // 0x42 → high res scroll (int16 steps)
+    // 0x42 | int16 dx | int16 dy
+    // ---------------------------------------
+    case 0x42: {
+      int16_t dx = payload[1] | (payload[2] << 8);
+      int16_t dy = payload[3] | (payload[4] << 8);
+      touchpad.scroll(dx, dy);
+      break;
+    }
+
+    // ---------------------------------------
+    // TOUCHPAD ZOOMING
+    // 0x43 → high res zoom (int16)
+    // 0x43 | int16
+    // ---------------------------------------
+    case 0x43: {
       int16_t steps = payload[1] | (payload[2] << 8);
-      touchpad.scroll(0, steps);
+      touchpad.zoom(steps);
       break;
     }
-    case 0x53: {
-      touchpad.scrollEnd();
+
+    // 0x4F → lift fingers (end of gesture)
+    case 0x4F: {
+      touchpad.liftFingers();
       break;
     }
+
+    // ---------------------------------------
+    // POWER CONTROL
+    // 0xA1 → press pc power button
+    // payload: opcode | int8 value
+    // ---------------------------------------
+    case 0xA1: {
+      int8_t val = payload[1];
+      if (val == 1) {
+      }
+      break;
+    }
+
+    // 0xFE → reboot esp32s3
     case 0xFE: {
       Serial.println("System: Reset command received. Rebooting...");
       delay(500); // Give time for Serial to print
       ESP.restart();
       break;
     }
+
     default: {
-      // if (Serial.availableForWrite() > 32) {
-      //   Serial.printf("Unknown command: 0x%02X\n", cmd);
-      // }
+      if (Serial.availableForWrite() > 32) {
+        Serial.printf("Unknown command: 0x%02X\n", cmd);
+      }
       break;
     }
   }

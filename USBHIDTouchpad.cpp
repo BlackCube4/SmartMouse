@@ -160,11 +160,9 @@ static const uint8_t touchpad_report_descriptor[] = {
   0xc0,                               // END_COLLECTION (TLC 2)
 };
 
-// Offset from center to place the two fingers apart (X axis)
-#define FINGER_SPACING 500
-
 USBHIDTouchpad::USBHIDTouchpad() : hid(), _scan_time(0), _input_mode(3), 
-                             _fingers_down(false), _current_x(LOGICAL_MAX_X/2), _current_y(LOGICAL_MAX_Y/2) {
+                             _fingers_down(false), _current_x(LOGICAL_MAX_X/2), 
+                             _current_y(LOGICAL_MAX_Y/2), _current_spacing(FINGER_SPACING_DEFAULT) {
   static bool initialized = false;
   if (!initialized) {
     initialized = true;
@@ -176,7 +174,7 @@ void USBHIDTouchpad::begin() { hid.begin(); }
 void USBHIDTouchpad::end() {}
 
 // --- Internal Report Sender ---
-void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos) {
+void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos, uint16_t spacing) {
   uint8_t report[14];
   memset(report, 0, sizeof(report)); // Clear report
 
@@ -193,8 +191,9 @@ void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos) 
     // Byte 0: Tip Switch (Bit 0), Confidence (Bit 1) -> 0x03
     report[0] = 0x03; 
     
-    uint16_t x1 = x_pos - (FINGER_SPACING/5); // Smaller offset for this Logical Max
-    if (x1 > LOGICAL_MAX_X) x1 = 0; // Safety wrap
+    uint16_t half = spacing / 2;
+    uint16_t x1 = (x_pos > half) ? x_pos - half : 0;
+    if (x1 > LOGICAL_MAX_X) x1 = 0;
     
     report[1] = x1 & 0xFF;
     report[2] = (x1 >> 8) & 0xFF;
@@ -204,7 +203,7 @@ void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos) 
     // Finger 2 (Byte 5-9)
     report[5] = 0x07; // Contact ID 1 + Tip + Confidence
     
-    uint16_t x2 = x_pos + (FINGER_SPACING/5);
+    uint16_t x2 = x_pos + half;
     if (x2 > LOGICAL_MAX_X) x2 = LOGICAL_MAX_X;
 
     report[6] = x2 & 0xFF;
@@ -233,7 +232,8 @@ void USBHIDTouchpad::scroll(int16_t dx, int16_t dy) {
     _fingers_down = true;
     _current_x = LOGICAL_MAX_X / 2; 
     _current_y = LOGICAL_MAX_Y / 2; 
-    _sendReport(2, _current_x, _current_y); 
+    _current_spacing = FINGER_SPACING_DEFAULT;
+    _sendReport(2, _current_x, _current_y, _current_spacing); 
   }
 
   // 2. Move Fingers
@@ -251,10 +251,26 @@ void USBHIDTouchpad::scroll(int16_t dx, int16_t dy) {
   if (_current_y < 100)   _current_y = 100;
 
   // 3. Send Position Update
-  _sendReport(2, _current_x, _current_y);
+  _sendReport(2, _current_x, _current_y, _current_spacing);
 }
 
-void USBHIDTouchpad::scrollEnd() {
+void USBHIDTouchpad::zoom(int16_t delta) {
+  if (!_fingers_down) {
+    _fingers_down = true;
+    _current_x = LOGICAL_MAX_X / 2;
+    _current_y = LOGICAL_MAX_Y / 2;
+    _current_spacing = FINGER_SPACING_DEFAULT;
+  }
+
+  _current_spacing += delta;
+  // Clamp spacing: fingers shouldn't touch (min 50) or exceed logical bounds
+  if (_current_spacing < 50) _current_spacing = 50;
+  if (_current_spacing > 1500) _current_spacing = 1500;
+
+  _sendReport(2, _current_x, _current_y, _current_spacing);
+}
+
+void USBHIDTouchpad::liftFingers() {
   // Lift fingers (Contact Count = 0)
   if (_fingers_down) {
     // === 1. Intermediate Report: Contacts are NO longer pressing (Tip Switch = 0) but are still "confident" ===
@@ -271,7 +287,8 @@ void USBHIDTouchpad::scrollEnd() {
 
     // Finger 1 (Byte 0-4): Tip Switch=0, Confidence=1 -> 0x02
     report_intermediate[0] = 0x02; 
-    uint16_t x1 = _current_x - (FINGER_SPACING/5);
+    uint16_t half = _current_spacing / 2;
+    uint16_t x1 = (_current_x > half) ? _current_x - half : 0;
     if (x1 > LOGICAL_MAX_X) x1 = 0;
     report_intermediate[1] = x1 & 0xFF;
     report_intermediate[2] = (x1 >> 8) & 0xFF;
@@ -280,7 +297,7 @@ void USBHIDTouchpad::scrollEnd() {
 
     // Finger 2 (Byte 5-9): Contact ID 1 + Tip=0 + Confidence=1 -> 0x06
     report_intermediate[5] = 0x06; 
-    uint16_t x2 = _current_x + (FINGER_SPACING/5);
+    uint16_t x2 = _current_x + half;
     if (x2 > LOGICAL_MAX_X) x2 = LOGICAL_MAX_X;
     report_intermediate[6] = x2 & 0xFF;
     report_intermediate[7] = (x2 >> 8) & 0xFF;
@@ -311,6 +328,7 @@ void USBHIDTouchpad::scrollEnd() {
     // Reset position to center
     _current_x = LOGICAL_MAX_X / 2;
     _current_y = LOGICAL_MAX_Y / 2;
+    _current_spacing = FINGER_SPACING_DEFAULT;
   }
 }
 

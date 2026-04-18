@@ -27,7 +27,6 @@ public:
   void move(int16_t x, int16_t y, int8_t wheel = 0, int8_t pan = 0);
   
   // Absolute Movement (Screen Coordinates 0-32767)
-  // Does not handle clicks, just positioning.
   void moveTo(int16_t x, int16_t y);
   
   // Button Control (Sent via Relative Report)
