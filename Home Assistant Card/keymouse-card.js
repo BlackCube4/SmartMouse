@@ -50,6 +50,7 @@ class KeyMouseCard extends HTMLElement {
     if (isMobile) {
       this.uiBuilder.setupMobileLayout(root, this.touchpadHandler, this.gyroHandler);
     } else {
+      this.uiBuilder.setupDesktopLayout(root, this.serviceManager);
     }
 
     this.shadowRoot.appendChild(root);
