@@ -38,21 +38,29 @@ debug: true                     # Shows real-time sensor data and frequency
 | :--- | :--- | :--- |
 | `0x01` | Relative Mouse | `int16 dx, int16 dy` |
 | `0x02` | Absolute Mouse | `int16 x, int16 y` |
-| `0x11` | Key Press | `uint8 keycode` |
-| `0x12` | Key Release | `uint8 keycode` |
-| `0x13` | Key Send | `uint8 keycode` |
-| `0x21` | Mouse Press | `uint8 button_mask` |
-| `0x22` | Mouse Release | `uint8 button_mask` |
-| `0x23` | Mouse Click | `uint8 button_mask` |
-| `0x31` | Media Press | `int16 usage_code` |
-| `0x32` | Media Release | (None) |
-| `0x41` | Text Send | `string (null terminated)` |
-| `0x51` | Scroll Wheel | `int16 delta` |
-| `0x52` | Touchpad Scroll| `int16 delta` |
-| `0x53` | Scroll End | (None) |
+| `0x03` | Mouse Button Down | `uint8 button_mask` |
+| `0x04` | Mouse Button Up | `uint8 button_mask` |
+| `0x05` | Mouse Click | `uint8 button_mask` |
+| `0x11` | Keyboard Key Down | `uint8 keycode` |
+| `0x12` | Keyboard Key Up | `uint8 keycode` |
+| `0x13` | Keyboard Key Send | `uint8 keycode` |
+| `0x21` | Media Key Down | `int16 usage_code` |
+| `0x22` | Media Key Up | (None) |
+| `0x23` | Media Key Send | `int16 usage_code` |
+| `0x31` | Text Injection | `string (utf8)` |
+| `0x41` | Mouse Scroll | `int8 steps` |
+| `0x42` | Touchpad Scroll | `int16 dx, int16 dy` |
+| `0x43` | Touchpad Zoom | `int16 delta` |
+| `0x44` | Custom Multi-Finger | `uint8 mask, 5x [uint16 x, uint16 y]` |
+| `0x4F` | Lift Fingers | (None) - Releases all touchpad contacts |
 | `0xF0` | Telemetry | `float temp, int8 rssi, uint8 power_save` |
 | `0xFE` | System Reset | (None) - Triggers Hardware Restart |
 | `0xFF` | Auth Handshake| `string password` |
+
+### Custom Multi-Finger (0x44) Detail
+The payload for `0x44` expects exactly 21 bytes following the opcode. 
+1. `uint8` : Active mask. Bit 0 for Finger 1, Bit 1 for Finger 2, etc. (1=active, 0=inactive).
+2. `5x [uint16 x, uint16 y]`: 5 blocks of X and Y positions (0-4095), Little-Endian.
 
 ## Home Assistant Services
 The `esp_mouse` domain provides services for automation:

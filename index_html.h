@@ -1,3 +1,6 @@
+#ifndef INDEX_HTML_H
+#define INDEX_HTML_H
+
 const char* INDEX_HTML = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -1415,3 +1418,5 @@ const char* INDEX_HTML = R"rawliteral(
 </body>
 </html>
 )rawliteral";
+
+#endif

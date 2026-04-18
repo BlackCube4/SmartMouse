@@ -285,6 +285,23 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
       break;
     }
 
+    // ---------------------------------------
+    // CUSTOM TOUCHPAD GESTURE (5 Fingers)
+    // 0x44 | mask (1) | [x (2) | y (2)] * 5
+    // ---------------------------------------
+    case 0x44: {
+      USBHIDTouchpad::FingerData fingers[5];
+      uint8_t mask = payload[1];
+      for (int i = 0; i < 5; i++) {
+        fingers[i].active = (mask >> i) & 0x01;
+        uint8_t base = 2 + (i * 4);
+        fingers[i].x = payload[base] | (payload[base + 1] << 8);
+        fingers[i].y = payload[base + 2] | (payload[base + 3] << 8);
+      }
+      touchpad.updateFingers(fingers);
+      break;
+    }
+
     // 0x4F → lift fingers (end of gesture)
     case 0x4F: {
       touchpad.liftFingers();

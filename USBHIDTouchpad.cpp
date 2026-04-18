@@ -78,6 +78,111 @@ static const uint8_t touchpad_report_descriptor[] = {
   0x09, 0x31,                         //     USAGE (Y)
   0x81, 0x02,                         //     INPUT (Data,Var,Abs)
   0xc0,                               //   END_COLLECTION (Finger 2)
+
+  // Finger 3
+  0x05, 0x0d,                         //   USAGE_PAGE (Digitizers)
+  0x09, 0x22,                         //   USAGE (Finger)
+  0xa1, 0x02,                         //   COLLECTION (Logical)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x25, 0x01,                         //     LOGICAL_MAXIMUM (1)
+  0x09, 0x42,                         //     USAGE (Tip Switch)
+  0x09, 0x47,                         //     USAGE (Confidence)
+  0x95, 0x02,                         //     REPORT_COUNT (2)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x75, 0x03,                         //     REPORT_SIZE (3)
+  0x25, 0x05,                         //     LOGICAL_MAXIMUM (5)
+  0x09, 0x51,                         //     USAGE (Contact Identifier)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x95, 0x03,                         //     REPORT_COUNT (3)
+  0x81, 0x03,                         //     INPUT (Cnst,Var,Abs)
+  0x05, 0x01,                         //     USAGE_PAGE (Generic Desktop)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x0f,                   //     LOGICAL_MAXIMUM (4095)
+  0x75, 0x10,                         //     REPORT_SIZE (16)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x55, 0x0e,                         //     UNIT_EXPONENT (-2)
+  0x65, 0x11,                         //     UNIT (SI Linear: cm)
+  0x09, 0x30,                         //     USAGE (X)
+  0x35, 0x00,                         //     PHYSICAL_MINIMUM (0)
+  0x46, 0x14, 0x29,                   //     PHYSICAL_MAXIMUM (10500)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x46, 0x64, 0x19,                   //     PHYSICAL_MAXIMUM (6500)
+  0x09, 0x31,                         //     USAGE (Y)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0xc0,                               //   END_COLLECTION (Finger 3)
+
+  // Finger 4
+  0x05, 0x0d,                         //   USAGE_PAGE (Digitizers)
+  0x09, 0x22,                         //   USAGE (Finger)
+  0xa1, 0x02,                         //   COLLECTION (Logical)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x25, 0x01,                         //     LOGICAL_MAXIMUM (1)
+  0x09, 0x42,                         //     USAGE (Tip Switch)
+  0x09, 0x47,                         //     USAGE (Confidence)
+  0x95, 0x02,                         //     REPORT_COUNT (2)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x75, 0x03,                         //     REPORT_SIZE (3)
+  0x25, 0x05,                         //     LOGICAL_MAXIMUM (5)
+  0x09, 0x51,                         //     USAGE (Contact Identifier)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x95, 0x03,                         //     REPORT_COUNT (3)
+  0x81, 0x03,                         //     INPUT (Cnst,Var,Abs)
+  0x05, 0x01,                         //     USAGE_PAGE (Generic Desktop)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x0f,                   //     LOGICAL_MAXIMUM (4095)
+  0x75, 0x10,                         //     REPORT_SIZE (16)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x55, 0x0e,                         //     UNIT_EXPONENT (-2)
+  0x65, 0x11,                         //     UNIT (SI Linear: cm)
+  0x09, 0x30,                         //     USAGE (X)
+  0x35, 0x00,                         //     PHYSICAL_MINIMUM (0)
+  0x46, 0x14, 0x29,                   //     PHYSICAL_MAXIMUM (10500)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x46, 0x64, 0x19,                   //     PHYSICAL_MAXIMUM (6500)
+  0x09, 0x31,                         //     USAGE (Y)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0xc0,                               //   END_COLLECTION (Finger 4)
+
+  // Finger 5
+  0x05, 0x0d,                         //   USAGE_PAGE (Digitizers)
+  0x09, 0x22,                         //   USAGE (Finger)
+  0xa1, 0x02,                         //   COLLECTION (Logical)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x25, 0x01,                         //     LOGICAL_MAXIMUM (1)
+  0x09, 0x42,                         //     USAGE (Tip Switch)
+  0x09, 0x47,                         //     USAGE (Confidence)
+  0x95, 0x02,                         //     REPORT_COUNT (2)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x75, 0x03,                         //     REPORT_SIZE (3)
+  0x25, 0x05,                         //     LOGICAL_MAXIMUM (5)
+  0x09, 0x51,                         //     USAGE (Contact Identifier)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x75, 0x01,                         //     REPORT_SIZE (1)
+  0x95, 0x03,                         //     REPORT_COUNT (3)
+  0x81, 0x03,                         //     INPUT (Cnst,Var,Abs)
+  0x05, 0x01,                         //     USAGE_PAGE (Generic Desktop)
+  0x15, 0x00,                         //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x0f,                   //     LOGICAL_MAXIMUM (4095)
+  0x75, 0x10,                         //     REPORT_SIZE (16)
+  0x95, 0x01,                         //     REPORT_COUNT (1)
+  0x55, 0x0e,                         //     UNIT_EXPONENT (-2)
+  0x65, 0x11,                         //     UNIT (SI Linear: cm)
+  0x09, 0x30,                         //     USAGE (X)
+  0x35, 0x00,                         //     PHYSICAL_MINIMUM (0)
+  0x46, 0x14, 0x29,                   //     PHYSICAL_MAXIMUM (10500)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0x46, 0x64, 0x19,                   //     PHYSICAL_MAXIMUM (6500)
+  0x09, 0x31,                         //     USAGE (Y)
+  0x81, 0x02,                         //     INPUT (Data,Var,Abs)
+  0xc0,                               //   END_COLLECTION (Finger 5)
   
   // Scan Time
   0x05, 0x0d,                         //   USAGE_PAGE (Digitizers)
@@ -175,16 +280,14 @@ void USBHIDTouchpad::end() {}
 
 // --- Internal Report Sender ---
 void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos, uint16_t spacing) {
-  uint8_t report[14];
+  uint8_t report[29];
   memset(report, 0, sizeof(report)); // Clear report
 
-  // Report ID 5 is Implicit (First byte of buffer if using TinyUSB raw, 
-  // but Arduino USBHID.SendReport takes ID as arg).
-  // HOWEVER, standard PTP structure is complex. 
-  // We construct the payload based on UnifiedHID logic.
-  
-  // Contact count (Byte 12)
-  report[12] = count;
+  // Report Layout: 
+  // [F1x5][F2x5][F3x5][F4x5][F5x5][ScanTimex2][ContactCountx1][Buttonsx1]
+
+  // Contact count (Byte 27)
+  report[27] = count;
 
   if (count > 0) {
     // Finger 1 (Byte 0-4)
@@ -212,15 +315,14 @@ void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos, 
     report[9] = (y_pos >> 8) & 0xFF;
   } 
   
-  // Scan Time (Byte 10-11)
-  report[10] = _scan_time & 0xFF;
-  report[11] = (_scan_time >> 8) & 0xFF;
+  // Scan Time (Byte 25-26)
+  report[25] = _scan_time & 0xFF;
+  report[26] = (_scan_time >> 8) & 0xFF;
 
-  // Buttons (Byte 13) -> 0x00
+  // Buttons (Byte 28) -> 0x00
 
-  hid.SendReport(REPORTID_TOUCHPAD, report, sizeof(report));
+  hid.SendReport(REPORTID_TOUCHPAD, report, 29);
   
-  // Windows PTP uses scan_time deltas to calculate velocity
   _scan_time += 100; // 10ms units roughly
 }
 
@@ -270,32 +372,52 @@ void USBHIDTouchpad::zoom(int16_t delta) {
   _sendReport(2, _current_x, _current_y, _current_spacing);
 }
 
-void USBHIDTouchpad::liftFingers() {
-  // Lift fingers (Contact Count = 0)
-  if (_fingers_down) {
-    // === 1. Intermediate Report: Contacts are NO longer pressing (Tip Switch = 0) but are still "confident" ===
-    // This is often critical for clean termination.
+void USBHIDTouchpad::updateFingers(FingerData* fingers) {
+  uint8_t report[29];
+  memset(report, 0, sizeof(report));
+  uint8_t activeCount = 0;
+
+  for(int i = 0; i < 5; i++) {
+    uint8_t base = i * 5;
+    // Always include the Contact ID in its reserved slot
+    // Bit 0: Tip Switch (follows .active), Bit 1: Confidence (always 1 if we report it)
+    uint8_t tip = fingers[i].active ? 0x01 : 0x00;
+    report[base] = (i << 2) | 0x02 | tip; 
     
-    // Finger 1 (Byte 0-4): Tip Switch (Bit 0) = 0, Confidence (Bit 1) = 1 -> 0x02
-    // We reuse the last positions, only changing the tip/confidence byte.
-    uint8_t report_intermediate[14];
+    report[base+1] = fingers[i].x & 0xFF;
+    report[base+2] = (fingers[i].x >> 8) & 0xFF;
+    report[base+3] = fingers[i].y & 0xFF;
+    report[base+4] = (fingers[i].y >> 8) & 0xFF;
+
+    if(fingers[i].active) activeCount++;
+  }
+
+  report[25] = _scan_time & 0xFF;
+  report[26] = (_scan_time >> 8) & 0xFF;
+  report[27] = activeCount;
+
+  hid.SendReport(REPORTID_TOUCHPAD, report, 29);
+  _scan_time += 100;
+  _fingers_down = (activeCount > 0);
+}
+
+void USBHIDTouchpad::liftFingers() {
+  if (_fingers_down) {
+    uint8_t report_intermediate[29];
     memset(report_intermediate, 0, sizeof(report_intermediate));
 
-    // Reconstruct the report with contact data but modified Tip Switch
-    // Contact count (Byte 12) = 2
-    report_intermediate[12] = 2; 
+    report_intermediate[27] = 2; 
 
     // Finger 1 (Byte 0-4): Tip Switch=0, Confidence=1 -> 0x02
     report_intermediate[0] = 0x02; 
     uint16_t half = _current_spacing / 2;
     uint16_t x1 = (_current_x > half) ? _current_x - half : 0;
-    if (x1 > LOGICAL_MAX_X) x1 = 0;
     report_intermediate[1] = x1 & 0xFF;
     report_intermediate[2] = (x1 >> 8) & 0xFF;
     report_intermediate[3] = _current_y & 0xFF;
     report_intermediate[4] = (_current_y >> 8) & 0xFF;
 
-    // Finger 2 (Byte 5-9): Contact ID 1 + Tip=0 + Confidence=1 -> 0x06
+    // Finger 2 (Byte 5-9): ID 1 + Tip=0 + Confidence=1 -> 0x06
     report_intermediate[5] = 0x06; 
     uint16_t x2 = _current_x + half;
     if (x2 > LOGICAL_MAX_X) x2 = LOGICAL_MAX_X;
@@ -304,24 +426,23 @@ void USBHIDTouchpad::liftFingers() {
     report_intermediate[8] = _current_y & 0xFF;
     report_intermediate[9] = (_current_y >> 8) & 0xFF;
     
-    // Scan time update
     _scan_time += 10; // Small increment
-    report_intermediate[10] = _scan_time & 0xFF;
-    report_intermediate[11] = (_scan_time >> 8) & 0xFF;
+    report_intermediate[25] = _scan_time & 0xFF;
+    report_intermediate[26] = (_scan_time >> 8) & 0xFF;
     
-    hid.SendReport(REPORTID_TOUCHPAD, report_intermediate, 14);
+    hid.SendReport(REPORTID_TOUCHPAD, report_intermediate, 29);
 
     // === 2. Final Report: Zero Contacts ===
     
-    uint8_t report_final[14] = {0};
+    uint8_t report_final[29] = {0};
     
     // Scan time update
     _scan_time += 10; // Small increment
-    report_final[10] = _scan_time & 0xFF;
-    report_final[11] = (_scan_time >> 8) & 0xFF;
-    report_final[12] = 0; // 0 Contacts
+    report_final[25] = _scan_time & 0xFF;
+    report_final[26] = (_scan_time >> 8) & 0xFF;
+    report_final[27] = 0; // 0 Contacts
     
-    hid.SendReport(REPORTID_TOUCHPAD, report_final, 14);
+    hid.SendReport(REPORTID_TOUCHPAD, report_final, 29);
 
     _fingers_down = false;
     

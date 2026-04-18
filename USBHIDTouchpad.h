@@ -40,6 +40,12 @@ static const uint8_t PTPHQA_BLOB[256] = {
 
 class USBHIDTouchpad : public USBHIDDevice {
 private:
+  struct Finger {
+    uint16_t x;
+    uint16_t y;
+    uint8_t  active : 1; // 1-bit state as requested
+  };
+
   USBHID hid;
   uint16_t _scan_time;
   uint8_t _input_mode; 
@@ -56,11 +62,14 @@ public:
   void begin();
   void end();
   
+  typedef Finger FingerData;
+
   // --- Scroll API ---
   void scroll(int16_t dx, int16_t dy);
   void zoom(int16_t delta);
   void liftFingers();
-  
+  void updateFingers(FingerData* fingers);
+
   // --- USBHID Overrides ---
   uint16_t _onGetDescriptor(uint8_t *dst) override;
   void _onSetFeature(uint8_t report_id, const uint8_t* buffer, uint16_t len) override;
