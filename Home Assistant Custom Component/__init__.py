@@ -344,8 +344,8 @@ class KeyMouseConnection:
         while True:
             try:
                 _LOGGER.info("Connecting to KeyMouse at %s", self.uri)
-                # Note: ping_interval=None prevents automatic pings, relying on the ESP32 to maintain the connection
-                async with websockets.connect(self.uri, ping_interval=None) as ws:
+                # Enable pings so abrupt disconnects (e.g. power loss) are detected quickly
+                async with websockets.connect(self.uri, ping_interval=15, ping_timeout=15) as ws:
                     self.ws = ws
                     self.connected.set()
                     self._notify_listeners()

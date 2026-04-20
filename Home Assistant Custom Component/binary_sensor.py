@@ -7,39 +7,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the binary sensor platform."""
     ws_link = hass.data[DOMAIN]
     async_add_entities([
-        KeyMouseBinarySensor(ws_link, entry),
         KeyMousePowerSensor(ws_link, entry)
     ], True)
-
-class KeyMouseBinarySensor(BinarySensorEntity):
-    """Representation of the KeyMouse connection status."""
-
-    def __init__(self, ws_link, entry):
-        self._ws_link = ws_link
-        self._entry = entry
-        self._attr_name = f"{entry.title} Status"
-        self._attr_unique_id = f"{entry.entry_id}_status"
-        self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-
-    @property
-    def is_on(self):
-        """Return true if the binary sensor is on (connected)."""
-        return self._ws_link.connected.is_set()
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information to link this entity to the device."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
-            name=self._entry.title,
-            manufacturer="BlackCube",
-            model="KeyMouse",
-            sw_version="1.0.0",
-        )
-
-    async def async_added_to_hass(self):
-        """Register callbacks when entity is added."""
-        self._ws_link.add_listener(self.async_write_ha_state)
 
 class KeyMousePowerSensor(BinarySensorEntity):
     """Representation of the KeyMouse high power state."""
@@ -51,9 +20,14 @@ class KeyMousePowerSensor(BinarySensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_high_power"
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available (connected)."""
+        return self._ws_link.connected.is_set()
+
+    @property
     def is_on(self):
         """Return true if high power mode is active."""
-        return not self._ws_link.power_saving
+        return self._ws_link.power_saving is False
 
     @property
     def icon(self):

@@ -22,11 +22,11 @@ class KeyMouseCard extends HTMLElement {
       this.serviceManager.hass = hass;
     }
 
-    // Update connection indicator based on the binary_sensor status
+    // Update connection indicator based on whether the device entities are available
     if (this.uiBuilder && hass) {
-      // Attempt to find the status entity (naming convention from binary_sensor.py)
-      const entityId = Object.keys(hass.states).find(id => id.startsWith("binary_sensor.") && id.endsWith("_status"));
-      const isConnected = entityId ? hass.states[entityId].state === "on" : false;
+      // We use the restart button's availability to determine connection status
+      const entityId = Object.keys(hass.states).find(id => id.startsWith("button.") && id.endsWith("_restart"));
+      const isConnected = entityId ? hass.states[entityId].state !== "unavailable" : false;
       this.uiBuilder.updateConnectionState(isConnected);
     }
   }

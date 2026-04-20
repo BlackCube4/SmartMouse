@@ -45,6 +45,15 @@ class KeyMouseResetButton(ButtonEntity):
             manufacturer="BlackCube",
             model="KeyMouse",
         )
+        
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._ws_link.connected.is_set()
+
+    async def async_added_to_hass(self):
+        """Register callbacks when entity is added."""
+        self._ws_link.add_listener(self.async_write_ha_state)
 
     async def async_press(self) -> None:
         """Handle the button press."""
@@ -71,6 +80,15 @@ class KeyMousePCPowerButton(ButtonEntity):
             manufacturer="BlackCube",
             model="KeyMouse",
         )
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._ws_link.connected.is_set()
+
+    async def async_added_to_hass(self):
+        """Register callbacks when entity is added."""
+        self._ws_link.add_listener(self.async_write_ha_state)
 
     async def async_press(self) -> None:
         """Handle the button press."""

@@ -33,6 +33,11 @@ class KeyMouseBaseSensor(SensorEntity):
             model="KeyMouse",
         )
 
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available (connected)."""
+        return self._ws_link.connected.is_set()
+
     async def async_added_to_hass(self):
         self._ws_link.add_listener(self.async_write_ha_state)
 

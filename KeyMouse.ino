@@ -38,7 +38,7 @@ DNSServer dnsServer;
 // Power Management
 unsigned long lastActivityTime = 0;
 bool isPowerSaving = false;
-const unsigned long SLEEP_TIMEOUT = 20 * 60 * 1000; // 20 minutes
+const unsigned long SLEEP_TIMEOUT = 1 * 60 * 1000; // 20 minutes
 
 // Telemetry Timing
 unsigned long lastTelemetryTime = 0;
@@ -134,7 +134,6 @@ void enterPowerSaving() {
 // NEW: Function to handle HTTP requests for the web page
 void handleRoot() {
   wakeUp();
-  lastActivityTime = millis();
   String html = String(INDEX_HTML);
   html.replace("%PCPWR_ENABLED%", pcPowerEnabled ? "true" : "false");
   html.replace("%AUTH_TOKEN%", secret_key);
@@ -189,12 +188,10 @@ void handleSaveConfig() {
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
   if (type == WStype_BIN || type == WStype_TEXT) {
     wakeUp();
-    lastActivityTime = millis();
   }
 
   if (type == WStype_DISCONNECTED) {
     if (num < 16) client_authenticated[num] = false;
-    lastActivityTime = millis(); // Reset timer on disconnect
     return;
   }
 
@@ -209,6 +206,11 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   if (length < 1 || type != WStype_BIN) return;
 
   uint8_t cmd = payload[0];
+
+  // Only update activity time for actual HID input commands (0x01 to 0x4F)
+  if (cmd >= 0x01 && cmd <= 0x4F) {
+    lastActivityTime = millis();
+  }
 
   // Handle Authentication (Opcode 0xFF)
   if (cmd == 0xFF) {
@@ -533,6 +535,7 @@ void loop() {
     if (pcPowerEnabled) measureDutyCycle();
     float currentTemp = temperatureRead();
     int8_t rssi = (int8_t)WiFi.RSSI();
+    uint8_t currentPowerState = pcPowerEnabled ? getPowerState() : 1;
 
     // Thermal Logic
     if (!thermalThrottled && currentTemp > TEMP_LIMIT_HIGH) {
@@ -542,6 +545,11 @@ void loop() {
     } else if (thermalThrottled && currentTemp < TEMP_LIMIT_LOW) {
       thermalThrottled = false;
       Serial.printf("INFO: Temperature %.2fC normalized. Thermal lock released.\n", currentTemp);
+    }
+
+    // PC Power State Logic for Power Saving
+    if (pcPowerEnabled && (currentPowerState == 0 || currentPowerState == 2)) {
+      enterPowerSaving();
     }
 
     // Send Telemetry to Home Assistant (Opcode 0xF0 | float temp | int8 rssi)
@@ -556,7 +564,7 @@ void loop() {
       memcpy(&telePacket[1], &currentTemp, 4);
       telePacket[5] = (uint8_t)rssi;
       telePacket[6] = isPowerSaving ? 1 : 0;
-      telePacket[7] = getPowerState();
+      telePacket[7] = currentPowerState;
       telePacket[8] = pcPowerEnabled ? 0x01 : 0x00; // Capabilities Bitmask
       
       for (int i = 0; i < 16; i++) {
