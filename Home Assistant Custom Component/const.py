@@ -1,3 +1,3 @@
-"""Constants for the ESP Mouse integration."""
-DOMAIN = "esp_mouse"
+"""Constants for the KeyMouse integration."""
+DOMAIN = "keymouse"
 CONF_PASSWORD = "password"

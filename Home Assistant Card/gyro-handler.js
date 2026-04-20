@@ -388,13 +388,17 @@ export class GyroHandler {
     return true;
   }
 
+  _getStorageKey() {
+    return `keymouse_gyro_bounds_${this.config.device_id || 'default'}`;
+  }
+
   saveCalibration() {
-    localStorage.setItem('esp_mouse_gyro_bounds', JSON.stringify(this.bounds));
+    localStorage.setItem(this._getStorageKey(), JSON.stringify(this.bounds));
     this.isCalibrated = true;
   }
 
   loadCalibration() {
-    const stored = localStorage.getItem('esp_mouse_gyro_bounds');
+    const stored = localStorage.getItem(this._getStorageKey());
     if (stored) {
       this.bounds = JSON.parse(stored);
       this.isCalibrated = true;

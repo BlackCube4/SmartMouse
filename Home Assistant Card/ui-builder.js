@@ -138,7 +138,7 @@ export class UIBuilder {
     // Directly trigger the Home Assistant button entity for hardware reset
     if (serviceManager.hass) {
       serviceManager.hass.callService("button", "press", {
-        entity_id: "button.esp32_mouse_restart"
+        entity_id: "button.keymouse_restart"
       });
     }
     

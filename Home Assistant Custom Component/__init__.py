@@ -1,4 +1,4 @@
-"""ESP Mouse custom integration – persistent binary WebSocket link to ESP32."""
+"""KeyMouse custom integration – persistent binary WebSocket link to ESP32."""
 import asyncio
 import struct
 import logging
@@ -22,25 +22,25 @@ MOVE_PACKER = struct.Struct("<Bhh")
 # Mouse/Pointer
 OPCODE_MOUSE_RELATIVE   = 0x01
 OPCODE_MOUSE_ABSOLUTE   = 0x02
-OPCODE_MOUSE_PRESS      = 0x21
-OPCODE_MOUSE_RELEASE    = 0x22
-OPCODE_MOUSE_CLICK      = 0x23
+OPCODE_MOUSE_PRESS      = 0x03
+OPCODE_MOUSE_RELEASE    = 0x04
+OPCODE_MOUSE_CLICK      = 0x05
 
 # Keyboard
 OPCODE_KEY_PRESS        = 0x11
 OPCODE_KEY_RELEASE      = 0x12
 OPCODE_KEY_SEND         = 0x13
-OPCODE_TEXT_SEND        = 0x41
+OPCODE_TEXT_SEND        = 0x31
 
 # Media/Consumer Control
-OPCODE_MEDIA_PRESS      = 0x31
-OPCODE_MEDIA_RELEASE    = 0x32
-OPCODE_MEDIA_SEND       = 0x33
+OPCODE_MEDIA_PRESS      = 0x21
+OPCODE_MEDIA_RELEASE    = 0x22
+OPCODE_MEDIA_SEND       = 0x23
 
 # Scroll/Touchpad
-OPCODE_SCROLL_WHEEL     = 0x51 # Low-res scroll (mouse wheel)
-OPCODE_SCROLL_TOUCHPAD  = 0x52 # High-res scroll (touchpad)
-OPCODE_SCROLL_END       = 0x53 # Touchpad scroll end
+OPCODE_SCROLL_WHEEL     = 0x41 # Low-res scroll (mouse wheel)
+OPCODE_SCROLL_TOUCHPAD  = 0x42 # High-res scroll (touchpad)
+OPCODE_SCROLL_END       = 0x4F # Touchpad scroll end (Lift Fingers)
 
 # Mouse button codes (from USBHIDMouse.h)
 MOUSE_LEFT_BUTTON       = 0x01
@@ -48,6 +48,13 @@ MOUSE_RIGHT_BUTTON      = 0x02
 MOUSE_MIDDLE_BUTTON     = 0x04
 
 OPCODE_SYSTEM_RESET     = 0xFE
+
+# PC Power Control
+OPCODE_PC_CONTROL       = 0xA0
+PC_CMD_TOGGLE           = 0x01
+PC_CMD_HARD_OFF         = 0x02
+PC_CMD_ON               = 0x03
+PC_CMD_OFF              = 0x04
 # -----------------------------------------------------------
 
 # --- SERVICE SCHEMAS ---
@@ -66,8 +73,13 @@ SERVICE_BUTTON_SCHEMA = vol.Schema({
     vol.Optional("mode", default="click"): vol.In(["click", "down", "up"]),
 })
 
-SERVICE_SCROLL_SCHEMA = vol.Schema({
+SERVICE_WHEEL_SCROLL_SCHEMA = vol.Schema({
     vol.Required("delta"): vol.Coerce(int),
+})
+
+SERVICE_TOUCHPAD_SCROLL_SCHEMA = vol.Schema({
+    vol.Optional("x", default=0): vol.Coerce(int),
+    vol.Optional("y", default=0): vol.Coerce(int),
 })
 
 SERVICE_KEY_SCHEMA = vol.Schema({
@@ -86,27 +98,29 @@ SERVICE_TEXT_SCHEMA = vol.Schema({
 
 SERVICE_RESET_SCHEMA = vol.Schema({})
 
+SERVICE_PC_POWER_SCHEMA = vol.Schema({})
+
 SERVICE_MAP = {
     "move": (OPCODE_MOUSE_RELATIVE, "<Bhh", ["x", "y"]),
     "move_absolute": (OPCODE_MOUSE_ABSOLUTE, "<Bhh", ["x", "y"]),
-    "scroll_wheel": (OPCODE_SCROLL_WHEEL, "<Bh", ["delta"]),
-    "touchpad_scroll": (OPCODE_SCROLL_TOUCHPAD, "<Bh", ["delta"]),
+    "scroll_wheel": (OPCODE_SCROLL_WHEEL, "<Bb", ["delta"]),
+    "touchpad_scroll": (OPCODE_SCROLL_TOUCHPAD, "<Bhh", ["x", "y"]),
 }
 # -----------------------
 
 
 async def async_setup(hass, config):
-    """Set up the ESP Mouse component from configuration.yaml (not used but required)."""
+    """Set up the KeyMouse component from configuration.yaml (not used but required)."""
     return True
 
 
 async def async_setup_entry(hass, entry: ConfigEntry):
-    """Set up the ESP Mouse integration."""
+    """Set up the KeyMouse integration."""
     host = entry.data[CONF_HOST]
     port = entry.data[CONF_PORT]
     password = entry.data.get(CONF_PASSWORD, "")
 
-    ws_link = ESPMouseConnection(host, port, password, entry)
+    ws_link = KeyMouseConnection(host, port, password, entry)
     hass.data[DOMAIN] = ws_link
     hass.async_create_task(ws_link.run_forever())
 
@@ -169,24 +183,25 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     async def handle_scroll_wheel(call):
         """Send low-res scroll wheel movement."""
         delta = int(call.data.get("delta", 0))
-        
-        # Format: 0x51 | int16 value (3 bytes total)
-        packet = struct.pack("<Bh", OPCODE_SCROLL_WHEEL, delta) 
+
+        # Format: 0x41 | int8 value (2 bytes total) to match README/WebUI
+        packet = struct.pack("<Bb", OPCODE_SCROLL_WHEEL, delta)
         await ws_link.send(packet, binary=True)
 
-    # 0x52, 0x53: TOUCHPAD SCROLL
+    # 0x42, 0x4F: TOUCHPAD SCROLL
     async def handle_touchpad_scroll(call):
-        """Send high-res touchpad scroll movement (delta > 0) or scroll end (delta=0)."""
-        delta = int(call.data.get("delta", 0))
+        """Send high-res touchpad scroll movement (dx, dy) or scroll end (dx=0, dy=0)."""
+        x = int(call.data.get("x", 0))
+        y = int(call.data.get("y", 0))
         
-        if delta == 0:
-            # Opcode 0x53: SCROLL END (1 byte total)
+        if x == 0 and y == 0:
+            # Opcode 0x4F: SCROLL END (1 byte total)
             opcode = OPCODE_SCROLL_END
             packet = struct.pack("<B", opcode)
         else:
-            # Opcode 0x52: HIGH-RES SCROLL (3 bytes total)
+            # Opcode 0x42: HIGH-RES SCROLL (5 bytes total)
             opcode = OPCODE_SCROLL_TOUCHPAD
-            packet = struct.pack("<Bh", opcode, delta)
+            packet = struct.pack("<Bhh", opcode, x, y)
             
         await ws_link.send(packet, binary=True)
         
@@ -258,13 +273,39 @@ async def async_setup_entry(hass, entry: ConfigEntry):
         packet = struct.pack("<B", OPCODE_SYSTEM_RESET)
         await ws_link.send(packet, binary=True)
 
+    async def handle_pc_toggle(call):
+        """Pulse the PC power button."""
+        packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_TOGGLE)
+        await ws_link.send(packet, binary=True)
+
+    async def handle_pc_hard_off(call):
+        """Hold the PC power button for a hard shutdown."""
+        packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_HARD_OFF)
+        await ws_link.send(packet, binary=True)
+
+    async def handle_pc_on(call):
+        """Turn the PC on if it's currently off."""
+        packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_ON)
+        await ws_link.send(packet, binary=True)
+
+    async def handle_pc_off(call):
+        """Turn the PC off if it's currently on."""
+        packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_OFF)
+        await ws_link.send(packet, binary=True)
+
+    # Register PC Power Services
+    hass.services.async_register(DOMAIN, "pc_power_toggle", handle_pc_toggle, schema=SERVICE_PC_POWER_SCHEMA)
+    hass.services.async_register(DOMAIN, "pc_hard_power_off", handle_pc_hard_off, schema=SERVICE_PC_POWER_SCHEMA)
+    hass.services.async_register(DOMAIN, "pc_power_on", handle_pc_on, schema=SERVICE_PC_POWER_SCHEMA)
+    hass.services.async_register(DOMAIN, "pc_power_off", handle_pc_off, schema=SERVICE_PC_POWER_SCHEMA)
+
     # --- Register ALL Services ---
     # Using schemas makes these services safer and visible in HA's UI
     hass.services.async_register(DOMAIN, "move", handle_move, schema=SERVICE_MOVE_SCHEMA)
     hass.services.async_register(DOMAIN, "move_absolute", handle_move_absolute, schema=SERVICE_MOVE_ABS_SCHEMA)
     hass.services.async_register(DOMAIN, "button", handle_button, schema=SERVICE_BUTTON_SCHEMA) 
-    hass.services.async_register(DOMAIN, "scroll_wheel", handle_scroll_wheel, schema=SERVICE_SCROLL_SCHEMA)
-    hass.services.async_register(DOMAIN, "touchpad_scroll", handle_touchpad_scroll, schema=SERVICE_SCROLL_SCHEMA)
+    hass.services.async_register(DOMAIN, "scroll_wheel", handle_scroll_wheel, schema=SERVICE_WHEEL_SCROLL_SCHEMA)
+    hass.services.async_register(DOMAIN, "touchpad_scroll", handle_touchpad_scroll, schema=SERVICE_TOUCHPAD_SCROLL_SCHEMA)
     
     hass.services.async_register(DOMAIN, "key_control", handle_key_control, schema=SERVICE_KEY_SCHEMA)
     hass.services.async_register(DOMAIN, "media_control", handle_media_control, schema=SERVICE_MEDIA_SCHEMA)
@@ -281,7 +322,7 @@ async def async_unload_entry(hass, entry: ConfigEntry):
     return True
 
 
-class ESPMouseConnection:
+class KeyMouseConnection:
     """Persistent WebSocket connection to the ESP32 mouse server."""
 
     def __init__(self, host, port, password="", entry=None):
@@ -292,6 +333,8 @@ class ESPMouseConnection:
         self.temperature = None
         self.rssi = None
         self.power_saving = None
+        self.pc_status_raw = None
+        self.pc_power_supported = False
         self.entry = entry
         self._listeners = []
         self._run_task = None # To hold the asyncio task for run_forever
@@ -300,7 +343,7 @@ class ESPMouseConnection:
         """Maintain a persistent connection and reconnect on failure."""
         while True:
             try:
-                _LOGGER.info("Connecting to ESP Mouse at %s", self.uri)
+                _LOGGER.info("Connecting to KeyMouse at %s", self.uri)
                 # Note: ping_interval=None prevents automatic pings, relying on the ESP32 to maintain the connection
                 async with websockets.connect(self.uri, ping_interval=None) as ws:
                     self.ws = ws
@@ -308,25 +351,27 @@ class ESPMouseConnection:
                     self._notify_listeners()
                     self._run_task = asyncio.current_task() # Store the current task
                     
-                    # Auth Handshake: Send password as the first message
-                    if self.password:
-                        auth_packet = struct.pack("<B", 0xFF) + self.password.encode('utf-8') + b'\x00'
-                        await ws.send(auth_packet)
+                    # Auth Handshake: Always send password as the first message.
+                    pwd_to_send = self.password or ""
+                    auth_packet = struct.pack("<B", 0xFF) + pwd_to_send.encode('utf-8') + b'\x00'
+                    await ws.send(auth_packet)
                     
-                    _LOGGER.info("Connected to ESP Mouse.")
+                    _LOGGER.info("Connected to KeyMouse.")
                     async for message in ws:
-                        if isinstance(message, bytes) and len(message) == 7 and message[0] == 0xF0:
-                            # Skip Opcode (x) | Unpack Float (f) | Unpack Int8 (b) | Unpack PowerSave (b)
-                            temp, rssi, pwr_save = struct.unpack("<xfbb", message)
+                        if isinstance(message, bytes) and len(message) == 9 and message[0] == 0xF0:
+                            # Skip Opcode (x) | Float (f) | Int8 (b) | PowerSave (b) | PC Stat (b) | Cap (b)
+                            temp, rssi, pwr_save, pc_stat, cap = struct.unpack("<xfbbbb", message)
                             self.temperature = round(temp, 1)
                             self.rssi = rssi
                             self.power_saving = bool(pwr_save)
+                            self.pc_status_raw = pc_stat
+                            self.pc_power_supported = bool(cap & 0x01)
                             self._notify_listeners()
                         
             except Exception as err:
                 self.connected.clear()
                 self._notify_listeners()
-                _LOGGER.warning("ESP Mouse disconnected: %s", err)
+                _LOGGER.warning("KeyMouse disconnected: %s", err)
                 if self._run_task and self._run_task.done(): # Check if the task was cancelled
                     break # Exit loop if the task was intentionally cancelled (e.g., during unload)
                 await asyncio.sleep(5) # Increased delay for reconnection attempts
@@ -342,11 +387,11 @@ class ESPMouseConnection:
     async def send(self, data, binary=False):
         """Send bytes (binary) or text to ESP."""
         if not self.connected.is_set():
-            _LOGGER.warning("ESP Mouse not connected; packet dropped.")
+            _LOGGER.warning("KeyMouse not connected; packet dropped.")
             return
         try:
             # websockets automatically detects bytes → binary
-            await asyncio.wait_for(self.ws.send(data), timeout=0.5)
+            await asyncio.wait_for(self.ws.send(data), timeout=5.0)
         except Exception as err:
             _LOGGER.warning("Send failed: %s", err)
 

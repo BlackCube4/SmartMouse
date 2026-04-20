@@ -1,10 +1,10 @@
 {
-  "domain": "esp_mouse",
-  "name": "ESP Mouse",
+  "domain": "keymouse",
+  "name": "KeyMouse",
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/yourusername/esp_mouse",
+  "documentation": "https://github.com/BlackCube4/KeyMouse",
   "iot_class": "local_push",
   "requirements": ["websockets>=14.0"],
   "version": "1.0.0"

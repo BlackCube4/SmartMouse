@@ -9,6 +9,8 @@
 #include <Adafruit_NeoPixel.h>
 #include <Preferences.h>
 #include <DNSServer.h>
+#include <ESPmDNS.h>
+#include <NetBIOS.h>
 #include "index_html.h"
 #include "wifi_config_html.h"
 #include "test_sequence.h"
@@ -18,14 +20,20 @@ USBHIDMouse mouse;
 USBHIDConsumerControl media;
 USBHIDTouchpad touchpad;
 
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-const bool  test     = true;
+// PC Power GPIOs
+#define PIN_POWER_SW   8
+#define PIN_POWER_STAT 9
+// Pin 48 is the addressable WS2812 RGB LED.
+#define RGB_LED_PIN 48
+
+// --- COMPILE-TIME DEFAULTS ---
+const bool  ENABLE_TEST_MODE = false; // Set to true to run the test sequence on startup
+const bool  DEFAULT_PC_POWER_ENABLED = false; // Default capability before first setup
+const char* DEFAULT_SECRET   = "CHANGE_ME_SECRET";
 
 Preferences preferences;
 bool isAPMode = false;
 DNSServer dnsServer;
-IPAddress last_web_ip; // Stores the IP of the last client to load the web interface
 
 // Power Management
 unsigned long lastActivityTime = 0;
@@ -34,7 +42,7 @@ const unsigned long SLEEP_TIMEOUT = 20 * 60 * 1000; // 20 minutes
 
 // Telemetry Timing
 unsigned long lastTelemetryTime = 0;
-const unsigned long TELEMETRY_INTERVAL = 10000; // 10 seconds
+const unsigned long TELEMETRY_INTERVAL = 1000;  // 1 second (allows correct sleep LED duty cycle detection)
 
 // Thermal Management
 bool thermalThrottled = false;
@@ -42,14 +50,62 @@ const float TEMP_LIMIT_HIGH = 80.0; // Celsius - Start throttling
 const float TEMP_LIMIT_LOW  = 60.0; // Celsius - Resume high performance
 
 // Security
-const char* secret_key = "CHANGE_ME_SECRET"; // Set this to match your HA config
-bool client_authenticated = false;         // Simple flag to gatekeep HID commands
+const char* secret_key = DEFAULT_SECRET; 
+bool client_authenticated[16] = {false};   // Track authentication per-client
+bool pcPowerEnabled = false;               // Capability flag
 
 WebSocketsServer wsServer(81);
 WebServer server(80);
 
-// Pin 48 is the addressable WS2812 RGB LED.
-#define RGB_LED_PIN 48
+// PC Power State Tracking
+volatile uint32_t pulseHighTime = 0;
+volatile uint32_t pulseTotalTime = 0;
+volatile uint32_t lastRise = 0;
+volatile uint32_t lastFall = 0;
+float lastDutyCycle = 0; 
+
+void IRAM_ATTR powerStatISR() {
+  uint32_t now = micros();
+  if (digitalRead(PIN_POWER_STAT) == LOW) { // Optocoupler pulls to GND when PC LED is ON
+    pulseTotalTime = now - lastRise;
+    lastRise = now;
+  } else {
+    pulseHighTime = now - lastRise;
+    lastFall = now;
+  }
+}
+
+uint8_t getPowerState() {
+  // 0: Off, 1: On, 2: Energy Saving
+  if (lastDutyCycle < 5.0) return 0;
+  if (lastDutyCycle > 95.0) return 1;
+  return 2;
+}
+
+void pulsePowerSwitch(int durationMs) {
+  digitalWrite(PIN_POWER_SW, HIGH);
+  delay(durationMs);
+  digitalWrite(PIN_POWER_SW, LOW);
+}
+
+void measureDutyCycle() {
+  // Briefly disable interrupts to safely read volatile variables
+  noInterrupts();
+  uint32_t snapshotHigh = pulseHighTime;
+  uint32_t snapshotTotal = pulseTotalTime;
+  uint32_t snapRise = lastRise;
+  uint32_t snapFall = lastFall;
+  interrupts();
+
+  uint32_t now = micros();
+
+  // Handle static DC signals (no edges detected for > 500ms)
+  if ((now - snapRise > 500000) && (now - snapFall > 500000)) {
+    lastDutyCycle = (digitalRead(PIN_POWER_STAT) == LOW) ? 100.0 : 0.0;
+  } else if (snapshotTotal > 0) {
+    lastDutyCycle = (float)snapshotHigh / (float)snapshotTotal * 100.0;
+  }
+}
 
 // Initialize the NeoPixel object: 1 pixel on pin 48
 Adafruit_NeoPixel statusLED(1, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -79,12 +135,20 @@ void enterPowerSaving() {
 void handleRoot() {
   wakeUp();
   lastActivityTime = millis();
-  last_web_ip = server.client().remoteIP(); // Trust this IP for WebSocket commands
-  server.send(200, "text/html", INDEX_HTML);
+  String html = String(INDEX_HTML);
+  html.replace("%PCPWR_ENABLED%", pcPowerEnabled ? "true" : "false");
+  html.replace("%AUTH_TOKEN%", secret_key);
+  server.send(200, "text/html", html);
 }
 
 void handleWifiConfig() {
-  server.send(200, "text/html", WIFI_CONFIG_HTML);
+  String html = String(WIFI_CONFIG_HTML);
+  if (pcPowerEnabled) {
+    html.replace("%PCPWR_CHECKED%", "checked");
+  } else {
+    html.replace("%PCPWR_CHECKED%", "");
+  }
+  server.send(200, "text/html", html);
 }
 
 void handleScan() {
@@ -106,11 +170,13 @@ void handleCaptive() {
 void handleSaveConfig() {
   String nSSID = server.arg("ssid");
   String nPass = server.arg("pass");
+  String nPCPower = server.arg("pcpwr"); // "on" or empty
   
   if (nSSID.length() > 0) {
     preferences.begin("wifi", false);
     preferences.putString("ssid", nSSID);
     preferences.putString("pass", nPass);
+    preferences.putBool("pc_pwr", nPCPower == "on");
     preferences.end();
     server.send(200, "text/plain", "Credentials saved. Rebooting...");
     delay(2000);
@@ -127,8 +193,16 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   }
 
   if (type == WStype_DISCONNECTED) {
-    client_authenticated = false;
+    if (num < 16) client_authenticated[num] = false;
     lastActivityTime = millis(); // Reset timer on disconnect
+    return;
+  }
+
+  if (type == WStype_CONNECTED) {
+    // Auto-authenticate if in AP mode (secured by WiFi password)
+    if (isAPMode) {
+      if (num < 16) client_authenticated[num] = true;
+    }
     return;
   }
 
@@ -139,21 +213,15 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   // Handle Authentication (Opcode 0xFF)
   if (cmd == 0xFF) {
     if (strcmp((const char*)&payload[1], secret_key) == 0) {
-      client_authenticated = true;
-      Serial.println("Client Authenticated.");
+      if (num < 16) client_authenticated[num] = true;
+      Serial.printf("Client %u Authenticated.\n", num);
     } else {
       wsServer.disconnect(num);
     }
     return;
   }
 
-  // Ignore everything else until auth is done
-  // BYPASS: If in AP mode (protected by AP password) or if client matches the web requester's IP
-  if (isAPMode || wsServer.remoteIP(num) == last_web_ip) {
-    client_authenticated = true;
-  }
-
-  if (!client_authenticated) return;
+  if (num >= 16 || !client_authenticated[num]) return;
 
   switch (cmd) {
     // ---------------------------------------
@@ -309,13 +377,33 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
     }
 
     // ---------------------------------------
-    // POWER CONTROL
-    // 0xA1 → press pc power button
-    // payload: opcode | int8 value
+    // PC POWER CONTROL (0x60)
     // ---------------------------------------
-    case 0xA1: {
-      int8_t val = payload[1];
-      if (val == 1) {
+    case 0xA0: {
+      if (!pcPowerEnabled) break;
+      uint8_t pcCmd = payload[1];
+      if (pcCmd == 0x01) { // Toggle
+        pulsePowerSwitch(200); // Standard single press
+      } 
+      else if (pcCmd == 0x02) { // Hard Off
+        pulsePowerSwitch(3500);
+      } 
+      else if (pcCmd == 0x03) { // Power On
+        measureDutyCycle();
+        if (lastDutyCycle < 95.0) {
+          pulsePowerSwitch(100);
+        }
+      } 
+      else if (pcCmd == 0x04) { // Power Off
+        measureDutyCycle();
+        if (lastDutyCycle > 95.0) {
+          pulsePowerSwitch(100);
+          delay(1000);
+          measureDutyCycle();
+          if (lastDutyCycle > 95.0) {
+            pulsePowerSwitch(100);
+          }
+        }
       }
       break;
     }
@@ -341,6 +429,18 @@ void setup() {
   Serial.begin(115200);
   setCpuFrequencyMhz(240); // Maximize processing speed
 
+  preferences.begin("wifi", true);
+  pcPowerEnabled = preferences.getBool("pc_pwr", DEFAULT_PC_POWER_ENABLED);
+  preferences.end();
+
+  // Setup Power Pins
+  if (pcPowerEnabled) {
+    pinMode(PIN_POWER_SW, OUTPUT);
+    digitalWrite(PIN_POWER_SW, LOW);
+    pinMode(PIN_POWER_STAT, INPUT_PULLUP); // Optocoupler connects to GND, so pull UP by default
+    attachInterrupt(digitalPinToInterrupt(PIN_POWER_STAT), powerStatISR, CHANGE);
+  }
+
   // Properly turn off the addressable RGB LED
   statusLED.begin();
   statusLED.setPixelColor(0, statusLED.Color(0, 0, 0)); // Set color to Black/Off
@@ -355,10 +455,12 @@ void setup() {
 
   // WiFi Connection with AP Fallback
   preferences.begin("wifi", false);
-  String storedSSID = preferences.getString("ssid", ssid);
-  String storedPass = preferences.getString("pass", password);
+  String storedSSID = preferences.getString("ssid", "");
+  String storedPass = preferences.getString("pass", "");
   preferences.end();
 
+  WiFi.mode(WIFI_STA); // Force Station mode to ensure DHCP hostname registers correctly
+  WiFi.setHostname("keymouse"); 
   WiFi.begin(storedSSID.c_str(), storedPass.c_str());
   Serial.print("Connecting to WiFi");
   
@@ -380,7 +482,22 @@ void setup() {
     Serial.println("\nWiFi Connected!");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
+    Serial.print("Configuration Portal: http://");
+    Serial.print(WiFi.localIP()); Serial.println("/wifi");
     WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
+
+    // Initialize Name Resolvers AFTER getting an IP address
+    if (MDNS.begin("keymouse")) {
+      MDNS.setInstanceName("keymouse");
+      Serial.println("MDNS responder started: keymouse.local");
+      MDNS.addService("http", "tcp", 80);
+      MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
+      MDNS.addService("ws", "tcp", 81);
+      MDNS.addServiceTxt("ws", "tcp", "type", "hid");
+    } else {
+      Serial.println("Error setting up MDNS responder!");
+    }
+    NBNS.begin("keymouse"); // Add NetBIOS for fallback legacy support
   }
 
   lastTelemetryTime = millis();
@@ -398,7 +515,7 @@ void setup() {
   wsServer.onEvent(onWebSocketEvent);
   wsServer.begin();
 
-  if (test)
+  if (ENABLE_TEST_MODE)
   {
     runTestSequence(keyboard, mouse, media, touchpad);
   }
@@ -413,6 +530,7 @@ void loop() {
   if (millis() - lastTelemetryTime > TELEMETRY_INTERVAL) {
     lastTelemetryTime = millis();
     
+    if (pcPowerEnabled) measureDutyCycle();
     float currentTemp = temperatureRead();
     int8_t rssi = (int8_t)WiFi.RSSI();
 
@@ -427,13 +545,25 @@ void loop() {
     }
 
     // Send Telemetry to Home Assistant (Opcode 0xF0 | float temp | int8 rssi)
-    if (client_authenticated) {
-      uint8_t telePacket[7];
+    bool anyAuth = false;
+    for (int i = 0; i < 16; i++) {
+      if (client_authenticated[i]) { anyAuth = true; break; }
+    }
+    
+    if (anyAuth) {
+      uint8_t telePacket[9];
       telePacket[0] = 0xF0;
       memcpy(&telePacket[1], &currentTemp, 4);
       telePacket[5] = (uint8_t)rssi;
       telePacket[6] = isPowerSaving ? 1 : 0;
-      wsServer.broadcastBIN(telePacket, 7);
+      telePacket[7] = getPowerState();
+      telePacket[8] = pcPowerEnabled ? 0x01 : 0x00; // Capabilities Bitmask
+      
+      for (int i = 0; i < 16; i++) {
+        if (client_authenticated[i]) {
+          wsServer.sendBIN(i, telePacket, 9);
+        }
+      }
     }
   }
 

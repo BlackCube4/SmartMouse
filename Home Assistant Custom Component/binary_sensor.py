@@ -1,4 +1,4 @@
-"""Binary sensor platform for ESP Mouse connection status."""
+"""Binary sensor platform for KeyMouse connection status."""
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
@@ -7,12 +7,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the binary sensor platform."""
     ws_link = hass.data[DOMAIN]
     async_add_entities([
-        ESPMouseBinarySensor(ws_link, entry),
-        ESPMousePowerSensor(ws_link, entry)
+        KeyMouseBinarySensor(ws_link, entry),
+        KeyMousePowerSensor(ws_link, entry)
     ], True)
 
-class ESPMouseBinarySensor(BinarySensorEntity):
-    """Representation of the ESP Mouse connection status."""
+class KeyMouseBinarySensor(BinarySensorEntity):
+    """Representation of the KeyMouse connection status."""
 
     def __init__(self, ws_link, entry):
         self._ws_link = ws_link
@@ -32,8 +32,8 @@ class ESPMouseBinarySensor(BinarySensorEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
-            manufacturer="Vinc",
-            model="ESP32-S3 Super Mini",
+            manufacturer="BlackCube",
+            model="KeyMouse",
             sw_version="1.0.0",
         )
 
@@ -41,20 +41,24 @@ class ESPMouseBinarySensor(BinarySensorEntity):
         """Register callbacks when entity is added."""
         self._ws_link.add_listener(self.async_write_ha_state)
 
-class ESPMousePowerSensor(BinarySensorEntity):
-    """Representation of the ESP Mouse power saving state."""
+class KeyMousePowerSensor(BinarySensorEntity):
+    """Representation of the KeyMouse high power state."""
 
     def __init__(self, ws_link, entry):
         self._ws_link = ws_link
         self._entry = entry
-        self._attr_name = f"{entry.title} Power Saving"
-        self._attr_unique_id = f"{entry.entry_id}_power_save"
-        self._attr_device_class = BinarySensorDeviceClass.POWER
+        self._attr_name = f"{entry.title} High Power"
+        self._attr_unique_id = f"{entry.entry_id}_high_power"
 
     @property
     def is_on(self):
-        """Return true if power saving is active."""
-        return self._ws_link.power_saving
+        """Return true if high power mode is active."""
+        return not self._ws_link.power_saving
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return "mdi:flash" if self.is_on else "mdi:leaf"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -62,8 +66,8 @@ class ESPMousePowerSensor(BinarySensorEntity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
-            manufacturer="Vinc",
-            model="ESP32-S3 Super Mini",
+            manufacturer="BlackCube",
+            model="KeyMouse",
         )
 
     async def async_added_to_hass(self):

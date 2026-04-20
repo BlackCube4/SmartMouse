@@ -12,7 +12,7 @@ An ESP32-S3 based virtual HID (Keyboard/Mouse/Touchpad) that allows remote contr
 ## Home Assistant Configuration
 
 ### Installation
-1. Copy the `Home Assistant Custom Component` folder to your `custom_components` directory and rename it to `esp_mouse`.
+1. Copy the `Home Assistant Custom Component` folder to your `custom_components` directory and rename it to `keymouse`.
 2. Restart Home Assistant.
 3. Add the integration via the UI (**Settings > Devices & Services**).
 
@@ -53,6 +53,7 @@ debug: true                     # Shows real-time sensor data and frequency
 | `0x43` | Touchpad Zoom | `int16 delta` |
 | `0x44` | Custom Multi-Finger | `uint8 mask, 5x [uint16 x, uint16 y]` |
 | `0x4F` | Lift Fingers | (None) - Releases all touchpad contacts |
+| `0xA0` | PC Power Control | `uint8 0x01=Toggle, 0x02=Hard Off, 0x03=Power On, 0x04=Power Off` |
 | `0xF0` | Telemetry | `float temp, int8 rssi, uint8 power_save` |
 | `0xFE` | System Reset | (None) - Triggers Hardware Restart |
 | `0xFF` | Auth Handshake| `string password` |
@@ -63,11 +64,11 @@ The payload for `0x44` expects exactly 21 bytes following the opcode.
 2. `5x [uint16 x, uint16 y]`: 5 blocks of X and Y positions (0-4095), Little-Endian.
 
 ## Home Assistant Services
-The `esp_mouse` domain provides services for automation:
-- `esp_mouse.move`: Relative movement (`x`, `y`).
-- `esp_mouse.button`: Mouse clicks (`button`: left/right/middle, `mode`: click/down/up).
-- `esp_mouse.key_control`: Keyboard keys (`keycode`, `mode`: send/press/release).
-- `esp_mouse.text_send`: Raw string injection (`text`).
+The `keymouse` domain provides services for automation:
+- `keymouse.move`: Relative movement (`x`, `y`).
+- `keymouse.button`: Mouse clicks (`button`: left/right/middle, `mode`: click/down/up).
+- `keymouse.key_control`: Keyboard keys (`keycode`, `mode`: send/press/release).
+- `keymouse.text_send`: Raw string injection (`text`).
 
 ## Power & Thermal Management
 The device operates in two states:

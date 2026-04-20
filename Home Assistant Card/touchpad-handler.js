@@ -247,7 +247,7 @@ export class TouchpadHandler {
 
       const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
       if (Math.abs(scrollAmount) >= 1) {
-        this.serviceManager.sendTouchpadScroll(scrollAmount);
+        this.serviceManager.sendTouchpadScroll(0, scrollAmount);
         accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
       }
     };
@@ -257,7 +257,7 @@ export class TouchpadHandler {
         e.preventDefault();
         scrolling = false;
         accumulatedScroll = 0;
-        this.serviceManager.sendTouchpadScroll(0);
+        this.serviceManager.sendTouchpadScroll(0, 0);
       }
     };
 

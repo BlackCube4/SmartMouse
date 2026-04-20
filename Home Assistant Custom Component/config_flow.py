@@ -1,4 +1,4 @@
-"""Config flow for ESP Mouse integration."""
+"""Config flow for KeyMouse integration."""
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -8,8 +8,8 @@ from homeassistant.helpers import selector
 from .const import DOMAIN, CONF_PASSWORD
 
 
-class ESP32MouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for ESP Mouse."""
+class KeyMouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for KeyMouse."""
 
     VERSION = 1
 
@@ -39,7 +39,7 @@ class ESP32MouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # the values the user typed are kept in the fields instead of resetting.
         data_schema = self.add_suggested_values_to_schema(
             vol.Schema({
-                vol.Required(CONF_NAME, default="ESP32 Mouse"): selector.TextSelector(),
+                vol.Required(CONF_NAME, default="KeyMouse"): selector.TextSelector(),
                 vol.Required(CONF_HOST): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
                 ),
@@ -49,8 +49,9 @@ class ESP32MouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_PASSWORD): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                 ),
+                vol.Optional("PC Power Control", default=False): selector.BooleanSelector(),
             }),
-            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81, CONF_NAME: "ESP32 Mouse"}
+            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81, CONF_NAME: "KeyMouse"}
         )
 
         return self.async_show_form(

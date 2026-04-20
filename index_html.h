@@ -5,7 +5,7 @@ const char* INDEX_HTML = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-  <title>ESP32 S3 HID</title>
+  <title>KeyMouse Controller</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta charset="UTF-8">
 
@@ -22,6 +22,7 @@ const char* INDEX_HTML = R"rawliteral(
       --trackpad-bg: #2a2b2e;
       --primary: #666666;
       --error: #e74c3c;
+      --success: #2ecc71;
       --divider: #3a3b3d;
       --box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
     }
@@ -37,6 +38,7 @@ const char* INDEX_HTML = R"rawliteral(
       --trackpad-bg: #f8f9fa;
       --primary: #0d6efd;
       --error: #dc3545;
+      --success: #198754;
       --divider: transparent;
       --box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
     }
@@ -73,6 +75,14 @@ const char* INDEX_HTML = R"rawliteral(
       align-items: center;
     }
     
+    #setup-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      margin-right: 15px;
+      font-weight: 500;
+    }
+
     .status-dot {
       display: inline-block;
       width: 10px;
@@ -99,6 +109,22 @@ const char* INDEX_HTML = R"rawliteral(
       background: var(--btn-light);
     }
 
+    #pc-power-btn {
+      background: var(--error);
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-right: 15px;
+      font-weight: bold;
+    }
+    #pc-power-btn:active {
+      opacity: 0.8;
+    }
+
     #root {
       width: 100%;
       box-sizing: border-box;
@@ -111,9 +137,13 @@ const char* INDEX_HTML = R"rawliteral(
 <body>
   <div id="header-container">
     <div id="status-header">
-      <h1>ESP32 HID <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
+      <h1>KeyMouse <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
     </div>
-    <button id="theme-toggle">☀️/🌙</button>
+    <div style="display: flex; align-items: center;">
+      <button id="pc-power-btn" style="display: none;">PC Power</button>
+      <a href="/wifi" id="setup-link">Setup</a>
+      <button id="theme-toggle">☀️/🌙</button>
+    </div>
   </div>
   
   <div id="root">
@@ -121,11 +151,13 @@ const char* INDEX_HTML = R"rawliteral(
   </div>
 
 <script>
+  const PC_POWER_ENABLED = %PCPWR_ENABLED%;
+
   // ==========================================
   // THEME MANAGEMENT
   // ==========================================
   const themeToggle = document.getElementById('theme-toggle');
-  const savedTheme = localStorage.getItem('esp_theme') || 'dark';
+  const savedTheme = localStorage.getItem('keymouse_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
   themeToggle.addEventListener('click', () => {
@@ -133,7 +165,7 @@ const char* INDEX_HTML = R"rawliteral(
       const isDark = root.getAttribute('data-theme') === 'dark';
       const newTheme = isDark ? 'light' : 'dark';
       root.setAttribute('data-theme', newTheme);
-      localStorage.setItem('esp_theme', newTheme);
+      localStorage.setItem('keymouse_theme', newTheme);
   });
 
   // ==========================================
@@ -161,6 +193,15 @@ const char* INDEX_HTML = R"rawliteral(
           this.websocket.onerror = this.onError.bind(this);
       }
 
+      sendPCPower(cmd) {
+          if (this.websocket && this.websocket.readyState === 1) {
+              const buffer = new Uint8Array(2);
+              buffer[0] = 0xA0;
+              buffer[1] = cmd;
+              this.websocket.send(buffer);
+          }
+      }
+
   sendReset() {
       if (this.websocket && this.websocket.readyState === 1) {
           // 1. Release all 8 HID modifier keys (0xE0 to 0xE7)
@@ -174,13 +215,33 @@ const char* INDEX_HTML = R"rawliteral(
       }
   }
       
-      onOpen() { this.setStatus('connected'); }
+      onOpen() { 
+          this.setStatus('connected'); 
+          const token = "%AUTH_TOKEN%";
+          const encoder = new TextEncoder();
+          const encoded = encoder.encode(token);
+          const buffer = new Uint8Array(1 + encoded.length + 1);
+          buffer[0] = 0xFF;
+          buffer.set(encoded, 1);
+          buffer[buffer.length - 1] = 0;
+          this.websocket.send(buffer);
+      }
       onClose() {
           this.setStatus('disconnected');
           setTimeout(() => this.initWebSocket(), 2000);
       }
       onError(event) { this.websocket.close(); }
-      onMessage(event) { console.log("Msg: " + event.data); }
+      onMessage(event) { 
+          if (event.data instanceof ArrayBuffer) {
+              const view = new DataView(event.data);
+              if (view.byteLength === 9 && view.getUint8(0) === 0xF0) {
+                  const pcStat = view.getUint8(7);
+                  document.dispatchEvent(new CustomEvent('telemetry', { detail: { pcStat } }));
+              }
+          } else {
+              console.log("Msg: " + event.data); 
+          }
+      }
       
       sendCmd(opcode, value) {
           if (this.websocket && this.websocket.readyState === 1) {
@@ -218,38 +279,52 @@ const char* INDEX_HTML = R"rawliteral(
           let value;
           const buttonMap = { "left": 1, "right": 2, "middle": 4 };
           value = buttonMap[button] || 1;
-          if (state === "down") opcode = 0x21; 
-          else if (state === "up") opcode = 0x22;
-          else if (state === "click" || state === "send") opcode = 0x23;
+          if (state === "down") opcode = 0x03; 
+          else if (state === "up") opcode = 0x04;
+          else if (state === "click" || state === "send") opcode = 0x05;
           if (opcode) this.sendCmd(opcode, value);
       }
       
-      sendTouchpadScroll(amount) {
+      sendTouchpadScroll(dx, dy) {
           if (this.websocket && this.websocket.readyState === 1) {
-              if (amount === 0) {
+              if (dx === 0 && dy === 0) {
                   const buffer = new Uint8Array(1);
-                  buffer[0] = 0x53; // OPCODE_SCROLL_END
+                  buffer[0] = 0x4F; // OPCODE_SCROLL_END (Lift Fingers)
                   this.websocket.send(buffer);
               } else {
-                  const buffer = new ArrayBuffer(3);
+                  const buffer = new ArrayBuffer(5);
                   const view = new DataView(buffer);
-                  view.setUint8(0, 0x52); // OPCODE_SCROLL_TOUCHPAD
-                  view.setInt16(1, amount, true);
+                  view.setUint8(0, 0x42); // OPCODE_SCROLL_TOUCHPAD
+                  view.setInt16(1, dx, true);
+                  view.setInt16(3, dy, true);
                   this.websocket.send(buffer);
               }
           }
       }
 
       sendScrollWheel(amount) {
-          this.sendTouchpadScroll(amount);
+          if (this.websocket && this.websocket.readyState === 1) {
+              const buffer = new ArrayBuffer(2);
+              const view = new DataView(buffer);
+              view.setUint8(0, 0x41); // OPCODE_SCROLL_WHEEL
+              view.setInt8(1, amount);
+              this.websocket.send(buffer);
+          }
       }
       
       sendMediaKey(code, state) {
           if (this.websocket && this.websocket.readyState === 1) {
-              const buffer = new Uint8Array(2);
-              buffer[0] = (state === "press") ? 0x31 : 0x32;
-              buffer[1] = code;
-              this.websocket.send(buffer);
+              if (state === "press") {
+                  const buffer = new ArrayBuffer(3);
+                  const view = new DataView(buffer);
+                  view.setUint8(0, 0x21); // OPCODE_MEDIA_PRESS
+                  view.setInt16(1, code, true);
+                  this.websocket.send(buffer);
+              } else {
+                  const buffer = new Uint8Array(1);
+                  buffer[0] = 0x22; // OPCODE_MEDIA_RELEASE
+                  this.websocket.send(buffer);
+              }
           }
       }
 
@@ -268,7 +343,7 @@ const char* INDEX_HTML = R"rawliteral(
               const encoder = new TextEncoder();
               const encodedText = encoder.encode(text);
               const buffer = new Uint8Array(2 + encodedText.length);
-              buffer[0] = 0x41; // OPCODE_TEXT_SEND
+              buffer[0] = 0x31; // OPCODE_TEXT_SEND
               buffer.set(encodedText, 1);
               buffer[buffer.length - 1] = 0; // Null terminator
               this.websocket.send(new Uint8Array(buffer).buffer);
@@ -578,13 +653,17 @@ const char* INDEX_HTML = R"rawliteral(
       return true;
     }
 
+    _getStorageKey() {
+      return 'keymouse_gyro_bounds_' + window.location.hostname;
+    }
+
     saveCalibration() {
-      localStorage.setItem('esp_mouse_gyro_bounds', JSON.stringify(this.bounds));
+      localStorage.setItem(this._getStorageKey(), JSON.stringify(this.bounds));
       this.isCalibrated = true;
     }
 
     loadCalibration() {
-      const stored = localStorage.getItem('esp_mouse_gyro_bounds');
+      const stored = localStorage.getItem(this._getStorageKey());
       if (stored) {
         this.bounds = JSON.parse(stored);
         this.isCalibrated = true;
@@ -868,7 +947,7 @@ const char* INDEX_HTML = R"rawliteral(
         accumulatedScroll += delta;
         const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
         if (Math.abs(scrollAmount) >= 1) {
-          this.serviceManager.sendTouchpadScroll(scrollAmount);
+        this.serviceManager.sendTouchpadScroll(0, scrollAmount);
           accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
         }
       };
@@ -878,7 +957,7 @@ const char* INDEX_HTML = R"rawliteral(
           e.preventDefault();
           scrolling = false;
           accumulatedScroll = 0;
-          this.serviceManager.sendTouchpadScroll(0);
+        this.serviceManager.sendTouchpadScroll(0, 0);
         }
       };
 
@@ -1341,6 +1420,24 @@ const char* INDEX_HTML = R"rawliteral(
       modifierRow.appendChild(escBtn);
       expandedArea.appendChild(modifierRow);
       
+      const pcPowerRow = document.createElement("div");
+      Object.assign(pcPowerRow.style, { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px" });
+      pcPowerRow.style.display = PC_POWER_ENABLED ? "grid" : "none";
+
+      document.addEventListener('pc-power-cap', (e) => {
+          pcPowerRow.style.display = e.detail ? "grid" : "none";
+      });
+      
+      const pcOnBtn = this.createButton("PC ON", () => {
+          if (confirm("Turn PC ON?")) touchpadHandler.serviceManager.sendPCPower(0x03);
+      }, "14px");
+      const pcOffBtn = this.createButton("PC OFF", () => {
+          if (confirm("Turn PC OFF?")) touchpadHandler.serviceManager.sendPCPower(0x04);
+      }, "14px");
+      
+      pcPowerRow.append(pcOnBtn, pcOffBtn);
+      expandedArea.appendChild(pcPowerRow);
+
       if (this.config.debug) {
           const debugRow = document.createElement("div");
           Object.assign(debugRow.style, {
@@ -1393,6 +1490,28 @@ const char* INDEX_HTML = R"rawliteral(
     const gyroHandler = new GyroHandler(serviceManager, config);
     const touchpadHandler = new TouchpadHandler(serviceManager, gyroHandler, config);
     gyroHandler.touchpadHandler = touchpadHandler;
+
+    const pcPowerBtn = document.getElementById('pc-power-btn');
+    if (PC_POWER_ENABLED && pcPowerBtn) {
+        pcPowerBtn.style.display = 'inline-block';
+        pcPowerBtn.addEventListener('click', () => {
+            serviceManager.sendPCPower(0x01);
+        });
+
+        document.addEventListener('telemetry', (e) => {
+            const stat = e.detail.pcStat;
+            if (stat === 1) {
+                pcPowerBtn.style.background = 'var(--success)';
+                pcPowerBtn.innerText = 'PC: ON';
+            } else if (stat === 0) {
+                pcPowerBtn.style.background = 'var(--error)';
+                pcPowerBtn.innerText = 'PC: OFF';
+            } else {
+                pcPowerBtn.style.background = 'var(--primary)';
+                pcPowerBtn.innerText = 'PC: SLEEP';
+            }
+        });
+    }
 
     const uiBuilder = new UIBuilder(config);
     const rootElement = document.getElementById('root');
