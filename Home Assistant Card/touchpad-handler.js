@@ -20,8 +20,10 @@ export class TouchpadHandler {
     // Timing (ms)
     // "Wait for second tap" timer
     this.CLICK_DELAY = config.double_click_time ?? 250;
-    // Time to trigger Right Click (Tap 1) or Start Drag (Tap 2+)
-    this.HOLD_TIME = config.hold_time ?? 500;           
+    // Time to trigger Right Click (Tap 1)
+    this.HOLD_TIME = config.hold_time ?? 400;
+    // Movement deadzone (px)
+    this.DEADZONE = config.movement_deadzone ?? 3;
     
     this.startFrameLoop();
   }
@@ -46,10 +48,13 @@ export class TouchpadHandler {
     this.floatDY += dy;
   }
 
-  runMomentum() {
+  runMomentum(onComplete) {
     const friction = 0.92; // Adjust for how long the slide lasts
     const step = () => {
-      if (this.isTouchActive) return; // Cancel on new touch
+      if (this.isTouchActive) {
+        // Do NOT call onComplete() here. This allows an intercepting touch to keep dragActive = true.
+        return; // Cancel on new touch
+      }
 
       // Velocity is px/ms. At 60fps, 1 frame is ~16.6ms.
       const dx = this.velocityX * 16.6;
@@ -59,6 +64,7 @@ export class TouchpadHandler {
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
         this.velocityX = 0;
         this.velocityY = 0;
+        if (onComplete) onComplete();
         return;
       }
 
@@ -72,9 +78,9 @@ export class TouchpadHandler {
 
   setupPad(pad) {
     // State Machine Variables
-    let tapCount = 0;           // Tracks 1, 2, 3... taps in a sequence
+    let tapCount = 0;           // Tracks 1, 2 taps in a sequence
     let clickTimer = null;      // The "Wait for second tap" timer
-    let holdTimer = null;       // The "Right Click" or "Drag" timer
+    let holdTimer = null;       // The "Right Click" timer
     
     let isDragging = false;     // True if finger is actually moving
     let dragActive = false;     // True if we sent 'mousedown' (Left Down)
@@ -99,14 +105,14 @@ export class TouchpadHandler {
       isDragging = false;
       rightClickDone = false;
 
-      // LOGIC: Check if we are waiting for a sequence
-      if (clickTimer) {
-        // This is Tap 2, 3, etc.
+      // LOGIC: Check if we are waiting for a sequence (Tap 2)
+      if (dragActive) {
+        tapCount = 2; // Caught a momentum drag, maintain sequence
+      } else if (clickTimer) {
         clearTimeout(clickTimer);
         clickTimer = null;
-        tapCount++;
+        tapCount = 2; // Second tap
       } else {
-        // This is a fresh Tap 1
         tapCount = 1;
       }
 
@@ -119,13 +125,6 @@ export class TouchpadHandler {
           this.serviceManager.sendButton("right", "click");
           navigator.vibrate?.(50);
           rightClickDone = true;
-        } else {
-          // Tap 2+ Hold -> Start Drag (Left Down)
-          if (!dragActive) {
-            this.serviceManager.sendButton("left", "down");
-            dragActive = true;
-            navigator.vibrate?.(30);
-          }
         }
       }, this.HOLD_TIME);
     };
@@ -147,20 +146,16 @@ export class TouchpadHandler {
         this.velocityY = this.velocityY * 0.4 + curVY * 0.6;
       }
 
-      // Noise filter
-      if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      // Check for Movement (Deadzone)
+      if (!isDragging && (Math.abs(dx) > this.DEADZONE || Math.abs(dy) > this.DEADZONE)) {
         isDragging = true;
+        clearTimeout(holdTimer); 
         
-        // If we move, cancel the Right Click timer
-        if (tapCount === 1) {
-            clearTimeout(holdTimer); 
-        }
-        
-        // If Tap 2+ moves -> Immediate Drag Start (Left Down)
-        if (tapCount > 1 && !dragActive) {
-            clearTimeout(holdTimer); // Cancel hold wait, start immediately
+        // If Tap 2 moves -> Trigger Drag (Left Down)
+        if (tapCount === 2 && !dragActive) {
             this.serviceManager.sendButton("left", "down");
             dragActive = true;
+            navigator.vibrate?.(30);
         }
       }
 
@@ -178,46 +173,55 @@ export class TouchpadHandler {
       clearTimeout(holdTimer);
 
       const timeSinceLastMove = performance.now() - this.lastTouchTime;
-      // Trigger momentum if released while moving fast, but not during a drag/drop
-      if (isDragging && !dragActive && timeSinceLastMove < 50) {
-        this.runMomentum();
-      }
+      const wantsMomentum = isDragging && timeSinceLastMove < 50;
 
-      // CASE A: Drag Active (Tap 2+ was held/dragged)
-      if (dragActive) {
-        this.serviceManager.sendButton("left", "up");
-        dragActive = false;
-        tapCount = 0; // Reset sequence
-        return;
-      }
-
-      // CASE B: Right Click (Tap 1 was held)
-      if (rightClickDone) {
-        tapCount = 0; // Reset sequence
-        return;
-      }
-
-      // CASE C: Cursor Move (Tap 1 moved)
-      if (tapCount === 1 && isDragging) {
-        tapCount = 0; // Reset sequence, don't click
-        return;
-      }
-
-      // CASE D: Quick Tap Release (Tap 1, 2, 3...)
-      // We start the "Wait" timer to see if another tap comes
-      clickTimer = setTimeout(() => {
-        // Timer Expired -> Execute Clicks
-        for (let i = 0; i < tapCount; i++) {
-            // Add tiny delay between multi-clicks so OS registers them
-            setTimeout(() => {
-                this.serviceManager.sendButton("left", "click");
-            }, i * 50); 
+      if (tapCount === 1) {
+        // CASE: Tap 1 Hold (Right Click triggered)
+        if (rightClickDone) {
+          tapCount = 0;
+          return;
         }
-        
-        // Reset state
+
+        // CASE: Tap 1 Move (Cursor Move)
+        if (isDragging) {
+          tapCount = 0;
+          if (wantsMomentum) this.runMomentum();
+          return;
+        }
+
+        // CASE: Tap 1 Released < 200ms
+        clickTimer = setTimeout(() => {
+          // Timer Expired -> No 2nd tap -> Execute Left Click
+          this.serviceManager.sendButton("left", "click");
+          tapCount = 0;
+          clickTimer = null;
+        }, this.CLICK_DELAY);
+
+      } else if (tapCount === 2) {
+        if (dragActive) {
+          // Drag Termination Condition: No touch AND completely stopped moving
+          if (wantsMomentum) {
+            this.runMomentum(() => {
+              this.serviceManager.sendButton("left", "up");
+              dragActive = false;
+              tapCount = 0;
+            });
+          } else {
+            this.serviceManager.sendButton("left", "up");
+            dragActive = false;
+            tapCount = 0;
+          }
+        } else {
+          // No Movement on Second Tap -> Double Click
+          this.serviceManager.sendButton("left", "click");
+          setTimeout(() => {
+              this.serviceManager.sendButton("left", "click");
+          }, 50); // Tiny delay to ensure OS registers two distinct clicks
+          tapCount = 0;
+        }
+      } else {
         tapCount = 0;
-        clickTimer = null;
-      }, this.CLICK_DELAY);
+      }
     };
 
     pad.addEventListener("touchstart", startTouch, { passive: false });

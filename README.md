@@ -22,14 +22,14 @@ When using the custom card, you can tune the following parameters in the card's 
 ```yaml
 type: custom:keymouse-card
 device_id: <your_device_id>     # The ID of your device
-padSensitivity: 4               # Multiplier for touchpad cursor speed
+mouseSensitivity: 1.8           # Multiplier for touchpad cursor speed
 scrollSensitivity: 3            # Multiplier for touchpad scroll speed
 gyroSensitivity: 8              # Multiplier for Air Mouse movement
 smoothing: 0.15                 # Low-pass filter (0.0-1.0). Higher = smoother, more lag
-suppression_offset: 30          # Ms to ignore gyro after a click (prevents jitter)
-click_time: 200                 # Max ms for a tap to count as a click
-double_click_time: 300          # Max ms between taps for double-click
-hold_time: 500                  # Ms to hold for Right-Click/Drag-Lock
+suppression_offset: 20          # Ms to ignore gyro after a click (prevents jitter)
+double_click_time: 250          # Max ms between taps for double-click
+hold_time: 400                  # Ms to hold before triggering Right Click
+movement_deadzone: 3            # Deadzone in px before a tap becomes a move/drag
 debug: true                     # Shows real-time sensor data and frequency
 ```
 

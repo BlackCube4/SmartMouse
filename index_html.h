@@ -380,7 +380,7 @@ const char* INDEX_HTML = R"rawliteral(
       this.measuredFrequency = 0.0;
 
       this.GAIN = config.gyroSensitivity ?? 8.0;
-      this.SMOOTHING = config.smoothing ?? 0.2; 
+      this.SMOOTHING = config.smoothing ?? 0.15; 
       this.SUPPRESSION_OFFSET = config.suppression_offset ?? 20;
       this.suppressionEndTime = 0;
 
@@ -753,7 +753,8 @@ const char* INDEX_HTML = R"rawliteral(
       this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
       this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
       this.CLICK_DELAY = config.double_click_time ?? 250;
-      this.HOLD_TIME = config.hold_time ?? 500;
+      this.HOLD_TIME = config.hold_time ?? 400;
+      this.DEADZONE = config.movement_deadzone ?? 3;
       
       this.startFrameLoop();
     }
@@ -777,10 +778,13 @@ const char* INDEX_HTML = R"rawliteral(
       this.floatDY += dy;
     }
 
-    runMomentum() {
+    runMomentum(onComplete) {
       const friction = 0.92;
       const step = () => {
-        if (this.isTouchActive) return; 
+        if (this.isTouchActive) {
+          // Do NOT call onComplete() here. This allows an intercepting touch to keep dragActive = true.
+          return; // Cancel on new touch
+        }
 
         const dx = this.velocityX * 16.6;
         const dy = this.velocityY * 16.6;
@@ -788,6 +792,7 @@ const char* INDEX_HTML = R"rawliteral(
         if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
           this.velocityX = 0;
           this.velocityY = 0;
+          if (onComplete) onComplete();
           return;
         }
 
@@ -824,10 +829,12 @@ const char* INDEX_HTML = R"rawliteral(
         isDragging = false;
         rightClickDone = false;
 
-        if (clickTimer) {
+        if (dragActive) {
+          tapCount = 2; // Caught a momentum drag, maintain sequence
+        } else if (clickTimer) {
           clearTimeout(clickTimer);
           clickTimer = null;
-          tapCount++;
+          tapCount = 2; // Second tap
         } else {
           tapCount = 1;
         }
@@ -839,12 +846,6 @@ const char* INDEX_HTML = R"rawliteral(
             this.serviceManager.sendButton("right", "click");
             navigator.vibrate?.(50);
             rightClickDone = true;
-          } else {
-            if (!dragActive) {
-              this.serviceManager.sendButton("left", "down");
-              dragActive = true;
-              navigator.vibrate?.(30);
-            }
           }
         }, this.HOLD_TIME);
       };
@@ -865,13 +866,14 @@ const char* INDEX_HTML = R"rawliteral(
           this.velocityY = this.velocityY * 0.4 + curVY * 0.6;
         }
 
-        if (!isDragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        if (!isDragging && (Math.abs(dx) > this.DEADZONE || Math.abs(dy) > this.DEADZONE)) {
           isDragging = true;
-          if (tapCount === 1) clearTimeout(holdTimer);
-          if (tapCount > 1 && !dragActive) {
-              clearTimeout(holdTimer);
+          clearTimeout(holdTimer); 
+          
+          if (tapCount === 2 && !dragActive) {
               this.serviceManager.sendButton("left", "down");
               dragActive = true;
+              navigator.vibrate?.(30);
           }
         }
 
@@ -889,36 +891,49 @@ const char* INDEX_HTML = R"rawliteral(
         clearTimeout(holdTimer);
 
         const timeSinceLastMove = performance.now() - this.lastTouchTime;
-        if (isDragging && !dragActive && timeSinceLastMove < 50) {
-          this.runMomentum();
-        }
+        const wantsMomentum = isDragging && timeSinceLastMove < 50;
 
-        if (dragActive) {
-          this.serviceManager.sendButton("left", "up");
-          dragActive = false;
-          tapCount = 0; 
-          return;
-        }
-
-        if (rightClickDone) {
-          tapCount = 0;
-          return;
-        }
-
-        if (tapCount === 1 && isDragging) {
-          tapCount = 0;
-          return;
-        }
-
-        clickTimer = setTimeout(() => {
-          for (let i = 0; i < tapCount; i++) {
-              setTimeout(() => {
-                  this.serviceManager.sendButton("left", "click");
-              }, i * 50); 
+        if (tapCount === 1) {
+          if (rightClickDone) {
+            tapCount = 0;
+            return;
           }
+
+          if (isDragging) {
+            tapCount = 0;
+            if (wantsMomentum) this.runMomentum();
+            return;
+          }
+
+          clickTimer = setTimeout(() => {
+            this.serviceManager.sendButton("left", "click");
+            tapCount = 0;
+            clickTimer = null;
+          }, this.CLICK_DELAY);
+
+        } else if (tapCount === 2) {
+          if (dragActive) {
+            if (wantsMomentum) {
+              this.runMomentum(() => {
+                this.serviceManager.sendButton("left", "up");
+                dragActive = false;
+                tapCount = 0;
+              });
+            } else {
+              this.serviceManager.sendButton("left", "up");
+              dragActive = false;
+              tapCount = 0;
+            }
+          } else {
+            this.serviceManager.sendButton("left", "click");
+            setTimeout(() => {
+                this.serviceManager.sendButton("left", "click");
+            }, 50); 
+            tapCount = 0;
+          }
+        } else {
           tapCount = 0;
-          clickTimer = null;
-        }, this.CLICK_DELAY);
+        }
       };
 
       pad.addEventListener("touchstart", startTouch, { passive: false });
@@ -1294,8 +1309,14 @@ const char* INDEX_HTML = R"rawliteral(
       const textRow = document.createElement("div");
       Object.assign(textRow.style, { display: "flex", gap: "6px", alignItems: "center" });
 
-      const liveWrapper = document.createElement("div");
-      Object.assign(liveWrapper.style, { position: "relative", width: "15%" });
+      const liveWrapper = document.createElement("form");
+      Object.assign(liveWrapper.style, { position: "relative", width: "15%", margin: "0", padding: "0" });
+      
+      liveWrapper.addEventListener("submit", (e) => {
+        e.preventDefault();
+        touchpadHandler.serviceManager.sendKey(40, "send"); // Enter key
+        setTimeout(() => liveInput.focus(), 0);
+      });
       
       const ANCHOR = " "; 
       this.lastInputValue = ANCHOR;
@@ -1303,6 +1324,7 @@ const char* INDEX_HTML = R"rawliteral(
       liveInput.type = "password"; 
       liveInput.autocomplete = "off"; liveInput.autocorrect = "off";
       liveInput.autocapitalize = "off"; liveInput.spellcheck = false;
+      liveInput.enterKeyHint = "enter";
       liveInput.value = ANCHOR;
 
       Object.assign(liveInput.style, {
@@ -1380,20 +1402,21 @@ const char* INDEX_HTML = R"rawliteral(
         flex: "1", padding: "10px", borderRadius: "10px", background: "var(--trackpad-bg)",
         border: "1px solid var(--border-color)", color: "var(--text-color)", fontSize: "14px",
       });
-      textInput.addEventListener("keydown", (e) => e.stopPropagation());
-      textInput.addEventListener("keyup", (e) => e.stopPropagation());
-
-      const sendTextBtn = this.createButton("mdi:arrow-right-thin", () => {
-        const text = textInput.value;
-        if (text) {
-          touchpadHandler.serviceManager.sendText(text); textInput.value = "";
-        } else {
-          touchpadHandler.serviceManager.sendKey(40, "send");
+      textInput.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const text = textInput.value;
+          if (text) {
+            touchpadHandler.serviceManager.sendText(text); textInput.value = "";
+          } else {
+            touchpadHandler.serviceManager.sendKey(40, "send");
+          }
         }
       });
-      Object.assign(sendTextBtn.style, { width: "15%" });
+      textInput.addEventListener("keyup", (e) => e.stopPropagation());
 
-      textRow.append(liveWrapper, textInput, sendTextBtn);
+      textRow.append(liveWrapper, textInput);
       expandedArea.appendChild(textRow);
 
       const modifierRow = document.createElement("div");
@@ -1480,10 +1503,11 @@ const char* INDEX_HTML = R"rawliteral(
         mouseSensitivity: 1.8,
         scrollSensitivity: 3.0,
         gyroSensitivity: 8.0,
-        smoothing: 0.2,
+        smoothing: 0.15,
         suppression_offset: 20,
         double_click_time: 250,
-        hold_time: 500,
+        hold_time: 400,
+        movement_deadzone: 3,
         debug: true // set to false to hide the debug panel
     };
 

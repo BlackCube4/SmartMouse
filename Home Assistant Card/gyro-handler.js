@@ -40,7 +40,7 @@ export class GyroHandler {
 
     // --- CONFIGURATION ---
     this.GAIN = config.gyroSensitivity ?? 8.0; 
-    this.SMOOTHING = config.smoothing ?? 0.2; 
+    this.SMOOTHING = config.smoothing ?? 0.15; 
     
     // Suppression: Extra wait time in ms after click release (Default: 20ms)
     this.SUPPRESSION_OFFSET = config.suppression_offset ?? 20;

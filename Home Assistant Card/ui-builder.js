@@ -490,10 +490,19 @@ export class UIBuilder {
     });
 
     // --- LIVE INPUT WRAPPER ---
-    const liveWrapper = document.createElement("div");
+    const liveWrapper = document.createElement("form");
     Object.assign(liveWrapper.style, {
       position: "relative",
       width: "15%",
+      margin: "0",
+      padding: "0"
+    });
+    
+    liveWrapper.addEventListener("submit", (e) => {
+      e.preventDefault();
+      // On mobile keyboards, Enter might bypass keydown and trigger form submit
+      touchpadHandler.serviceManager.sendKey(40, "send"); // Send Enter
+      setTimeout(() => liveInput.focus(), 0);
     });
 
     const ANCHOR = " "; 
@@ -507,6 +516,7 @@ export class UIBuilder {
     liveInput.autocorrect = "off";
     liveInput.autocapitalize = "off";
     liveInput.spellcheck = false;
+    liveInput.enterKeyHint = "enter";
     liveInput.value = ANCHOR;
 
     Object.assign(liveInput.style, {
@@ -637,24 +647,22 @@ export class UIBuilder {
       fontSize: "14px",
     });
 
-    textInput.addEventListener("keydown", (e) => e.stopPropagation());
-    textInput.addEventListener("keyup", (e) => e.stopPropagation());
-
-    // --- SEND BUTTON ---
-    const sendTextBtn = this.createButton("mdi:arrow-right-thin", () => { //→
-      const text = textInput.value;
-      if (text) {
-        touchpadHandler.serviceManager.sendText(text);
-        textInput.value = "";
-      } else {
-        touchpadHandler.serviceManager.sendKey(40, "send");
+    textInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const text = textInput.value;
+        if (text) {
+          touchpadHandler.serviceManager.sendText(text);
+          textInput.value = "";
+        } else {
+          touchpadHandler.serviceManager.sendKey(40, "send"); // Enter key
+        }
       }
     });
-    Object.assign(sendTextBtn.style, {
-      width: "15%",
-    });
+    textInput.addEventListener("keyup", (e) => e.stopPropagation());
 
-    textRow.append(liveWrapper, textInput, sendTextBtn);
+    textRow.append(liveWrapper, textInput);
     expandedArea.appendChild(textRow);
 
     // MODIFIER KEYS -----------------------------------------------------------
