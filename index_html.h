@@ -5,7 +5,7 @@ const char* INDEX_HTML = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-  <title>KeyMouse Controller</title>
+  <title>SmartMouse Controller</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta charset="UTF-8">
 
@@ -137,7 +137,7 @@ const char* INDEX_HTML = R"rawliteral(
 <body>
   <div id="header-container">
     <div id="status-header">
-      <h1>KeyMouse <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
+      <h1>SmartMouse <span id="ws-status-dot" class="status-dot disconnected"></span></h1>
     </div>
     <div style="display: flex; align-items: center;">
       <button id="pc-power-btn" style="display: none;">PC Power</button>
@@ -157,7 +157,7 @@ const char* INDEX_HTML = R"rawliteral(
   // THEME MANAGEMENT
   // ==========================================
   const themeToggle = document.getElementById('theme-toggle');
-  const savedTheme = localStorage.getItem('keymouse_theme') || 'dark';
+  const savedTheme = localStorage.getItem('smartmouse_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
   themeToggle.addEventListener('click', () => {
@@ -165,7 +165,7 @@ const char* INDEX_HTML = R"rawliteral(
       const isDark = root.getAttribute('data-theme') === 'dark';
       const newTheme = isDark ? 'light' : 'dark';
       root.setAttribute('data-theme', newTheme);
-      localStorage.setItem('keymouse_theme', newTheme);
+      localStorage.setItem('smartmouse_theme', newTheme);
   });
 
   // ==========================================
@@ -654,7 +654,7 @@ const char* INDEX_HTML = R"rawliteral(
     }
 
     _getStorageKey() {
-      return 'keymouse_gyro_bounds_' + window.location.hostname;
+      return 'smartmouse_gyro_bounds_' + window.location.hostname;
     }
 
     saveCalibration() {

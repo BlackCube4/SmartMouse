@@ -3,7 +3,7 @@ import { GyroHandler } from './gyro-handler.js';
 import { UIBuilder } from './ui-builder.js';
 import { ServiceManager } from './service-manager.js';
 
-class KeyMouseCard extends HTMLElement {
+class SmartMouseCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -61,10 +61,10 @@ class KeyMouseCard extends HTMLElement {
   }
 }
 
-customElements.define("keymouse-card", KeyMouseCard);
+customElements.define("smartmouse-card", SmartMouseCard);
 
 /*
-type: custom:keymouse-card
+type: custom:smartmouse-card
 # --- SENSITIVITY ---
 mouseSensitivity: 1.8      # Touchpad speed multiplier (Default: 1.8)
 scrollSensitivity: 3.0     # Scroll bar speed multiplier (Default: 3.0)

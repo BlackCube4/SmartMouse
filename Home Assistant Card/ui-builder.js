@@ -138,7 +138,7 @@ export class UIBuilder {
     // Directly trigger the Home Assistant button entity for hardware reset
     if (serviceManager.hass) {
       serviceManager.hass.callService("button", "press", {
-        entity_id: "button.keymouse_restart"
+        entity_id: "button.smartmouse_restart"
       });
     }
     
@@ -195,7 +195,7 @@ export class UIBuilder {
 
       // --- DEBUGGING ---
       if (this.config.debug) {
-        console.log(`KeyMouse Debug | Key: "${e.key}", Code: "${e.code}"`);
+        console.log(`SmartMouse Debug | Key: "${e.key}", Code: "${e.code}"`);
       }
 
       let hidCode = this.getHIDKeycode(e.key, e.code);
@@ -281,7 +281,7 @@ export class UIBuilder {
         const btnName = btnMap[e.button] || "left";
         
         if (this.config.debug) {
-          console.log(`KeyMouse Debug | Mouse Button: ${e.button} (${btnName}) Mode: down`);
+          console.log(`SmartMouse Debug | Mouse Button: ${e.button} (${btnName}) Mode: down`);
         }
 
         serviceManager.sendButton(btnName, "down");
@@ -299,7 +299,7 @@ export class UIBuilder {
         const btnMap = { 0: "left", 1: "middle", 2: "right" };
         
         if (this.config.debug) {
-          console.log(`KeyMouse Debug | Mouse Button: ${e.button} (${btnMap[e.button]}) Mode: up`);
+          console.log(`SmartMouse Debug | Mouse Button: ${e.button} (${btnMap[e.button]}) Mode: up`);
         }
 
         serviceManager.sendButton(btnMap[e.button] || "left", "up");

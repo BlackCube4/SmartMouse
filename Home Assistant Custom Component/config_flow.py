@@ -1,4 +1,4 @@
-"""Config flow for KeyMouse integration."""
+"""Config flow for SmartMouse integration."""
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -8,8 +8,8 @@ from homeassistant.helpers import selector
 from .const import DOMAIN, CONF_PASSWORD
 
 
-class KeyMouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for KeyMouse."""
+class SmartMouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for SmartMouse."""
 
     VERSION = 1
 
@@ -39,7 +39,7 @@ class KeyMouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # the values the user typed are kept in the fields instead of resetting.
         data_schema = self.add_suggested_values_to_schema(
             vol.Schema({
-                vol.Required(CONF_NAME, default="KeyMouse"): selector.TextSelector(),
+                vol.Required(CONF_NAME, default="SmartMouse"): selector.TextSelector(),
                 vol.Required(CONF_HOST): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
                 ),
@@ -51,7 +51,7 @@ class KeyMouseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional("PC Power Control", default=False): selector.BooleanSelector(),
             }),
-            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81, CONF_NAME: "KeyMouse"}
+            user_input or {CONF_HOST: "192.168.1.100", CONF_PORT: 81, CONF_NAME: "SmartMouse"}
         )
 
         return self.async_show_form(

@@ -1,4 +1,4 @@
-"""KeyMouse custom integration – persistent binary WebSocket link to ESP32."""
+"""SmartMouse custom integration – persistent binary WebSocket link to ESP32."""
 import asyncio
 import struct
 import logging
@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 # This avoids parsing the format string on every single mouse move.
 MOVE_PACKER = struct.Struct("<Bhh")
 
-# --- OPCODES DEFINITIONS (from S3_KeyMouseTest_4.ino) ---
+# --- OPCODES DEFINITIONS (from S3_SmartMouseTest_4.ino) ---
 # Mouse/Pointer
 OPCODE_MOUSE_RELATIVE   = 0x01
 OPCODE_MOUSE_ABSOLUTE   = 0x02
@@ -110,17 +110,17 @@ SERVICE_MAP = {
 
 
 async def async_setup(hass, config):
-    """Set up the KeyMouse component from configuration.yaml (not used but required)."""
+    """Set up the SmartMouse component from configuration.yaml (not used but required)."""
     return True
 
 
 async def async_setup_entry(hass, entry: ConfigEntry):
-    """Set up the KeyMouse integration."""
+    """Set up the SmartMouse integration."""
     host = entry.data[CONF_HOST]
     port = entry.data[CONF_PORT]
     password = entry.data.get(CONF_PASSWORD, "")
 
-    ws_link = KeyMouseConnection(host, port, password, entry)
+    ws_link = SmartMouseConnection(host, port, password, entry)
     hass.data[DOMAIN] = ws_link
     hass.async_create_task(ws_link.run_forever())
 
@@ -322,7 +322,7 @@ async def async_unload_entry(hass, entry: ConfigEntry):
     return True
 
 
-class KeyMouseConnection:
+class SmartMouseConnection:
     """Persistent WebSocket connection to the ESP32 mouse server."""
 
     def __init__(self, host, port, password="", entry=None):
@@ -343,7 +343,7 @@ class KeyMouseConnection:
         """Maintain a persistent connection and reconnect on failure."""
         while True:
             try:
-                _LOGGER.info("Connecting to KeyMouse at %s", self.uri)
+                _LOGGER.info("Connecting to SmartMouse at %s", self.uri)
                 # Enable pings so abrupt disconnects (e.g. power loss) are detected quickly
                 async with websockets.connect(self.uri, ping_interval=15, ping_timeout=15) as ws:
                     self.ws = ws
@@ -356,7 +356,7 @@ class KeyMouseConnection:
                     auth_packet = struct.pack("<B", 0xFF) + pwd_to_send.encode('utf-8') + b'\x00'
                     await ws.send(auth_packet)
                     
-                    _LOGGER.info("Connected to KeyMouse.")
+                    _LOGGER.info("Connected to SmartMouse.")
                     async for message in ws:
                         if isinstance(message, bytes) and len(message) == 9 and message[0] == 0xF0:
                             # Skip Opcode (x) | Float (f) | Int8 (b) | PowerSave (b) | PC Stat (b) | Cap (b)
@@ -371,7 +371,7 @@ class KeyMouseConnection:
             except Exception as err:
                 self.connected.clear()
                 self._notify_listeners()
-                _LOGGER.warning("KeyMouse disconnected: %s", err)
+                _LOGGER.warning("SmartMouse disconnected: %s", err)
                 if self._run_task and self._run_task.done(): # Check if the task was cancelled
                     break # Exit loop if the task was intentionally cancelled (e.g., during unload)
                 await asyncio.sleep(5) # Increased delay for reconnection attempts
@@ -387,7 +387,7 @@ class KeyMouseConnection:
     async def send(self, data, binary=False):
         """Send bytes (binary) or text to ESP."""
         if not self.connected.is_set():
-            _LOGGER.warning("KeyMouse not connected; packet dropped.")
+            _LOGGER.warning("SmartMouse not connected; packet dropped.")
             return
         try:
             # websockets automatically detects bytes → binary

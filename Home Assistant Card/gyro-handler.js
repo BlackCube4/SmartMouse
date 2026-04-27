@@ -389,7 +389,7 @@ export class GyroHandler {
   }
 
   _getStorageKey() {
-    return `keymouse_gyro_bounds_${this.config.device_id || 'default'}`;
+    return `smartmouse_gyro_bounds_${this.config.device_id || 'default'}`;
   }
 
   saveCalibration() {

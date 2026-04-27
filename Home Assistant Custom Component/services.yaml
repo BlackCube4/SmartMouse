@@ -1,5 +1,5 @@
 # ---------------------------------------
-# KEYMOUSE SERVICES
+# SMARTMOUSE SERVICES
 # ---------------------------------------
 move:
   description: Send relative mouse movement (Opcode 0x01)

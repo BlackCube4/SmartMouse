@@ -1,3 +1,3 @@
-"""Constants for the KeyMouse integration."""
-DOMAIN = "keymouse"
+"""Constants for the SmartMouse integration."""
+DOMAIN = "smartmouse"
 CONF_PASSWORD = "password"

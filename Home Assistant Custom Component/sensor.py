@@ -1,4 +1,4 @@
-"""Sensor platform for KeyMouse."""
+"""Sensor platform for SmartMouse."""
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfTemperature, SIGNAL_STRENGTH_DECIBELS_MILLIWATT
 from homeassistant.helpers.entity import DeviceInfo
@@ -8,17 +8,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the sensor platform."""
     ws_link = hass.data[DOMAIN]
     entities = [
-        KeyMouseTempSensor(ws_link, entry),
-        KeyMouseRSSISensor(ws_link, entry)
+        SmartMouseTempSensor(ws_link, entry),
+        SmartMouseRSSISensor(ws_link, entry)
     ]
     
     pc_power_enabled = entry.data.get("PC Power Control", False)
     if pc_power_enabled or ws_link.pc_power_supported:
-        entities.append(KeyMousePCPowerStateSensor(ws_link, entry))
+        entities.append(SmartMousePCPowerStateSensor(ws_link, entry))
         
     async_add_entities(entities, True)
 
-class KeyMouseBaseSensor(SensorEntity):
+class SmartMouseBaseSensor(SensorEntity):
     """Base sensor class for shared device info."""
     def __init__(self, ws_link, entry):
         self._ws_link = ws_link
@@ -30,7 +30,7 @@ class KeyMouseBaseSensor(SensorEntity):
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
             manufacturer="BlackCube",
-            model="KeyMouse",
+            model="SmartMouse",
         )
 
     @property
@@ -41,7 +41,7 @@ class KeyMouseBaseSensor(SensorEntity):
     async def async_added_to_hass(self):
         self._ws_link.add_listener(self.async_write_ha_state)
 
-class KeyMouseTempSensor(KeyMouseBaseSensor):
+class SmartMouseTempSensor(SmartMouseBaseSensor):
     """Internal temperature of the ESP32."""
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -56,7 +56,7 @@ class KeyMouseTempSensor(KeyMouseBaseSensor):
     def native_value(self):
         return self._ws_link.temperature
 
-class KeyMouseRSSISensor(KeyMouseBaseSensor):
+class SmartMouseRSSISensor(SmartMouseBaseSensor):
     """WiFi Signal Strength."""
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
@@ -71,7 +71,7 @@ class KeyMouseRSSISensor(KeyMouseBaseSensor):
     def native_value(self):
         return self._ws_link.rssi
 
-class KeyMousePCPowerStateSensor(KeyMouseBaseSensor):
+class SmartMousePCPowerStateSensor(SmartMouseBaseSensor):
     """Power state derived from duty cycle."""
 
     def __init__(self, ws_link, entry):

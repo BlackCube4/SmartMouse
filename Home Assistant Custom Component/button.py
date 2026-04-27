@@ -1,4 +1,4 @@
-"""Button platform for KeyMouse."""
+"""Button platform for SmartMouse."""
 import struct
 from homeassistant.components.button import ButtonEntity, ButtonDeviceClass
 from homeassistant.helpers.entity import DeviceInfo
@@ -7,21 +7,21 @@ from .const import DOMAIN
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the button platform."""
     ws_link = hass.data[DOMAIN]
-    entities = [KeyMouseResetButton(ws_link, entry)]
+    entities = [SmartMouseResetButton(ws_link, entry)]
     
     # Create PC Power entities if enabled in config or supported by hardware telemetry
     pc_power_enabled = entry.data.get("PC Power Control", False)
     
     if pc_power_enabled or ws_link.pc_power_supported:
         entities.extend([
-            KeyMousePCPowerButton(ws_link, entry, "PC Power Toggle", 0x01, "mdi:power"),
-            KeyMousePCPowerButton(ws_link, entry, "PC Hard Power Off", 0x02, "mdi:alert-circle-outline"),
-            KeyMousePCPowerButton(ws_link, entry, "PC Power On", 0x03, "mdi:power-on"),
-            KeyMousePCPowerButton(ws_link, entry, "PC Power Off", 0x04, "mdi:power-off"),
+            SmartMousePCPowerButton(ws_link, entry, "PC Power Toggle", 0x01, "mdi:power"),
+            SmartMousePCPowerButton(ws_link, entry, "PC Hard Power Off", 0x02, "mdi:alert-circle-outline"),
+            SmartMousePCPowerButton(ws_link, entry, "PC Power On", 0x03, "mdi:power-on"),
+            SmartMousePCPowerButton(ws_link, entry, "PC Power Off", 0x04, "mdi:power-off"),
         ])
     async_add_entities(entities, True)
 
-class KeyMouseResetButton(ButtonEntity):
+class SmartMouseResetButton(ButtonEntity):
     """Button to reset the ESP32 device."""
 
     def __init__(self, ws_link, entry):
@@ -43,7 +43,7 @@ class KeyMouseResetButton(ButtonEntity):
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
             manufacturer="BlackCube",
-            model="KeyMouse",
+            model="SmartMouse",
         )
         
     @property
@@ -61,7 +61,7 @@ class KeyMouseResetButton(ButtonEntity):
         packet = struct.pack("<B", 0xFE)
         await self._ws_link.send(packet, binary=True)
 
-class KeyMousePCPowerButton(ButtonEntity):
+class SmartMousePCPowerButton(ButtonEntity):
     """Button to control PC power states."""
 
     def __init__(self, ws_link, entry, name, cmd_id, icon):
@@ -78,7 +78,7 @@ class KeyMousePCPowerButton(ButtonEntity):
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
             manufacturer="BlackCube",
-            model="KeyMouse",
+            model="SmartMouse",
         )
 
     @property

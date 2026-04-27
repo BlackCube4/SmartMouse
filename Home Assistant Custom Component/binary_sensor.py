@@ -1,4 +1,4 @@
-"""Binary sensor platform for KeyMouse connection status."""
+"""Binary sensor platform for SmartMouse connection status."""
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
@@ -7,11 +7,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the binary sensor platform."""
     ws_link = hass.data[DOMAIN]
     async_add_entities([
-        KeyMousePowerSensor(ws_link, entry)
+        SmartMousePowerSensor(ws_link, entry)
     ], True)
 
-class KeyMousePowerSensor(BinarySensorEntity):
-    """Representation of the KeyMouse high power state."""
+class SmartMousePowerSensor(BinarySensorEntity):
+    """Representation of the SmartMouse high power state."""
 
     def __init__(self, ws_link, entry):
         self._ws_link = ws_link
@@ -41,7 +41,7 @@ class KeyMousePowerSensor(BinarySensorEntity):
             identifiers={(DOMAIN, self._entry.unique_id or self._entry.entry_id)},
             name=self._entry.title,
             manufacturer="BlackCube",
-            model="KeyMouse",
+            model="SmartMouse",
         )
 
     async def async_added_to_hass(self):

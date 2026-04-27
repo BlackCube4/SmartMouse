@@ -462,7 +462,7 @@ void setup() {
   preferences.end();
 
   WiFi.mode(WIFI_STA); // Force Station mode to ensure DHCP hostname registers correctly
-  WiFi.setHostname("keymouse"); 
+  WiFi.setHostname("smartmouse"); 
   WiFi.begin(storedSSID.c_str(), storedPass.c_str());
   Serial.print("Connecting to WiFi");
   
@@ -473,9 +473,9 @@ void setup() {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWiFi Failed. Starting Access Point: KeyMouse-Setup");
+    Serial.println("\nWiFi Failed. Starting Access Point: SmartMouse-Setup");
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("KeyMouse-Setup", "KeyMouse123"); // Set your AP password here
+    WiFi.softAP("SmartMouse-Setup", "SmartMouse123"); // Set your AP password here
     isAPMode = true;
     dnsServer.start(53, "*", WiFi.softAPIP()); // Redirect all DNS to local IP
     Serial.print("AP IP Address: ");
@@ -489,9 +489,9 @@ void setup() {
     WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
 
     // Initialize Name Resolvers AFTER getting an IP address
-    if (MDNS.begin("keymouse")) {
-      MDNS.setInstanceName("keymouse");
-      Serial.println("MDNS responder started: keymouse.local");
+    if (MDNS.begin("smartmouse")) {
+      MDNS.setInstanceName("smartmouse");
+      Serial.println("MDNS responder started: smartmouse.local");
       MDNS.addService("http", "tcp", 80);
       MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
       MDNS.addService("ws", "tcp", 81);
@@ -499,7 +499,7 @@ void setup() {
     } else {
       Serial.println("Error setting up MDNS responder!");
     }
-    NBNS.begin("keymouse"); // Add NetBIOS for fallback legacy support
+    NBNS.begin("smartmouse"); // Add NetBIOS for fallback legacy support
   }
 
   lastTelemetryTime = millis();

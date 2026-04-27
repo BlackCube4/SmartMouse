@@ -1,4 +1,4 @@
-# KeyMouse
+# SmartMouse
 An ESP32-S3 based virtual HID (Keyboard/Mouse/Touchpad) that allows remote control via Home Assistant using high-speed WebSockets.
 
 ## Features
@@ -12,7 +12,7 @@ An ESP32-S3 based virtual HID (Keyboard/Mouse/Touchpad) that allows remote contr
 ## Home Assistant Configuration
 
 ### Installation
-1. Copy the `Home Assistant Custom Component` folder to your `custom_components` directory and rename it to `keymouse`.
+1. Copy the `Home Assistant Custom Component` folder to your `custom_components` directory and rename it to `smartmouse`.
 2. Restart Home Assistant.
 3. Add the integration via the UI (**Settings > Devices & Services**).
 
@@ -20,7 +20,7 @@ An ESP32-S3 based virtual HID (Keyboard/Mouse/Touchpad) that allows remote contr
 When using the custom card, you can tune the following parameters in the card's YAML:
 
 ```yaml
-type: custom:keymouse-card
+type: custom:smartmouse-card
 device_id: <your_device_id>     # The ID of your device
 mouseSensitivity: 1.8           # Multiplier for touchpad cursor speed
 scrollSensitivity: 3            # Multiplier for touchpad scroll speed
@@ -64,11 +64,11 @@ The payload for `0x44` expects exactly 21 bytes following the opcode.
 2. `5x [uint16 x, uint16 y]`: 5 blocks of X and Y positions (0-4095), Little-Endian.
 
 ## Home Assistant Services
-The `keymouse` domain provides services for automation:
-- `keymouse.move`: Relative movement (`x`, `y`).
-- `keymouse.button`: Mouse clicks (`button`: left/right/middle, `mode`: click/down/up).
-- `keymouse.key_control`: Keyboard keys (`keycode`, `mode`: send/press/release).
-- `keymouse.text_send`: Raw string injection (`text`).
+The `smartmouse` domain provides services for automation:
+- `smartmouse.move`: Relative movement (`x`, `y`).
+- `smartmouse.button`: Mouse clicks (`button`: left/right/middle, `mode`: click/down/up).
+- `smartmouse.key_control`: Keyboard keys (`keycode`, `mode`: send/press/release).
+- `smartmouse.text_send`: Raw string injection (`text`).
 
 ## Power & Thermal Management
 The device operates in two states:

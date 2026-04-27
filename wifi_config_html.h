@@ -3,7 +3,7 @@
 
 const char* WIFI_CONFIG_HTML = R"rawliteral(
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KeyMouse WiFi Config</title>
+<title>SmartMouse WiFi Config</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { background: #121212; min-height: 100vh; }
