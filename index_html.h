@@ -365,6 +365,7 @@ const char* INDEX_HTML = R"rawliteral(
       this.calibrationStartTime = 0;
       this.calibrationDuration = 3000;
       this.calibrating = false;
+      this.firstAbsoluteFrame = false;
 
       this.orientation = { x: 0, y: 0, z: 0 };
       this.lastOrientation = { x: null, y: null, z: null };
@@ -445,8 +446,14 @@ const char* INDEX_HTML = R"rawliteral(
       const invertedAbsX = targetMax - absX;
       const invertedAbsY = targetMax - absY;
 
-      this.smoothX = (this.smoothX * 0.7) + (invertedAbsX * 0.3);
-      this.smoothY = (this.smoothY * 0.7) + (invertedAbsY * 0.3);
+      if (this.firstAbsoluteFrame) {
+        this.smoothX = invertedAbsX;
+        this.smoothY = invertedAbsY;
+        this.firstAbsoluteFrame = false;
+      } else {
+        this.smoothX = (this.smoothX * 0.7) + (invertedAbsX * 0.3);
+        this.smoothY = (this.smoothY * 0.7) + (invertedAbsY * 0.3);
+      }
 
       this.serviceManager.sendMoveAbsolute(Math.round(this.smoothX), Math.round(this.smoothY));
     }
@@ -617,7 +624,6 @@ const char* INDEX_HTML = R"rawliteral(
     async toggleGyroRelative() {
       if (this.gyroRelativeActive) {
         this.gyroRelativeActive = false;
-        this.stopListening();
         return;
       }
       const granted = await this.requestPermission();
@@ -633,14 +639,12 @@ const char* INDEX_HTML = R"rawliteral(
     async toggleGyroAbsolute() {
       if (this.gyroAbsoluteActive) {
         this.gyroAbsoluteActive = false;
-        this.stopListening();
         return;
       }
       const granted = await this.requestPermission();
       if (granted) {
         this.gyroAbsoluteActive = true;
-        this.smoothX = 0;
-        this.smoothY = 0;
+        this.firstAbsoluteFrame = true;
         this.startListening();
       }
     }
