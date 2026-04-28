@@ -11,6 +11,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <NetBIOS.h>
+#include <ArduinoOTA.h>
 #include "index_html.h"
 #include "wifi_config_html.h"
 #include "test_sequence.h"
@@ -505,6 +506,17 @@ void setup() {
   lastTelemetryTime = millis();
   lastActivityTime = millis();
 
+  // Setup OTA
+  ArduinoOTA.setHostname("smartmouse");
+  ArduinoOTA.setPassword(secret_key); // Require the SmartMouse secret key for OTA updates
+  ArduinoOTA.onStart([]() { Serial.println("OTA Update Started"); });
+  ArduinoOTA.onEnd([]() { Serial.println("\nOTA Update Finished"); });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("OTA Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) { Serial.printf("OTA Error[%u]\n", error); });
+  ArduinoOTA.begin();
+
   // Initialize Web Server
   server.on("/", HTTP_GET, handleRoot); // Handle the root path to serve the HTML
   server.on("/wifi", HTTP_GET, handleWifiConfig);
@@ -527,6 +539,7 @@ void loop() {
   server.handleClient();
   if (isAPMode) dnsServer.processNextRequest();
   wsServer.loop();
+  ArduinoOTA.handle();
 
   // Periodic Telemetry and Thermal Check (Every 10 seconds)
   if (millis() - lastTelemetryTime > TELEMETRY_INTERVAL) {
