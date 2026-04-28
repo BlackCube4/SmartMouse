@@ -1,48 +1,59 @@
 import { ServiceManager } from './service-manager';
 import { HomeAssistant, SmartMouseConfig } from './types';
+import { LitElement, html, css } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 
-class SmartMouseInputCardEditor extends HTMLElement {
-  private _config: any;
+@customElement('smartmouse-input-card-editor')
+export class SmartMouseInputCardEditor extends LitElement {
+  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state() private _config!: any;
 
   setConfig(config: any) {
     this._config = config;
-    this.render();
   }
 
-  render() {
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
-    this.shadowRoot!.innerHTML = `
+  private _valueChanged(ev: any, key: string) {
+    if (!this._config) return;
+    const target = ev.target as any;
+    const value = ev.detail?.value !== undefined ? ev.detail.value : target.value;
+    if (this._config[key] === value) return;
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: { ...this._config, [key]: value } },
+      bubbles: true, composed: true
+    }));
+  }
+
+  protected render() {
+    if (!this._config) return html``;
+    return html`
       <div class="card-config">
         <div class="option">
+          <label>Target Device</label>
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ device: {} }}
+            .value=${this._config.device_id || ''}
+            @value-changed=${(e: any) => this._valueChanged(e, 'device_id')}
+          ></ha-selector>
+        </div>
+        <div class="option">
           <label>Input Mode</label>
-          <select id="input-type">
-            <option value="buffered" ${this._config.inputType !== 'live' ? 'selected' : ''}>Buffered (Press Enter to send)</option>
-            <option value="live" ${this._config.inputType === 'live' ? 'selected' : ''}>Live (Sends as you type)</option>
+          <select .value=${this._config.inputType || 'buffered'} @change=${(e: any) => this._valueChanged(e, 'inputType')}>
+            <option value="buffered">Buffered (Press Enter to send)</option>
+            <option value="live">Live (Sends as you type)</option>
           </select>
         </div>
       </div>
-      <style>
-        .card-config { display: flex; flex-direction: column; gap: 12px; }
-        .option { display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); }
-        select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
-      </style>
     `;
-
-    const select = this.shadowRoot!.querySelector("#input-type") as HTMLSelectElement;
-    select.addEventListener("change", () => {
-      const newConfig = { ...this._config, inputType: select.value };
-      this.dispatchEvent(new CustomEvent("config-changed", {
-        detail: { config: newConfig },
-        bubbles: true,
-        composed: true,
-      }));
-    });
   }
+
+  static styles = css`
+    .card-config { display: flex; flex-direction: column; gap: 12px; }
+    .option { display: flex; flex-direction: column; gap: 4px; }
+    label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); margin: 0; }
+    select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); outline: none; }
+  `;
 }
-customElements.define("smartmouse-input-card-editor", SmartMouseInputCardEditor);
 
 class SmartMouseInputCard extends HTMLElement {
   private _hass?: HomeAssistant;
@@ -68,7 +79,7 @@ class SmartMouseInputCard extends HTMLElement {
     const oldConfig = this._config as any;
     this._config = config; 
     
-    if (this.rendered && (oldConfig?.inputType !== config.inputType)) {
+    if (this.rendered && (oldConfig?.inputType !== config.inputType || oldConfig?.device_id !== config.device_id)) {
       if (this.shadowRoot) this.shadowRoot.innerHTML = '';
       this.rendered = false;
       this.connectedCallback();

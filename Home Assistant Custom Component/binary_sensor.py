@@ -5,7 +5,7 @@ from .const import DOMAIN
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the binary sensor platform."""
-    ws_link = hass.data[DOMAIN]
+    ws_link = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
         SmartMousePowerSensor(ws_link, entry)
     ], True)

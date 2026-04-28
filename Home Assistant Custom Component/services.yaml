@@ -1,53 +1,59 @@
-# ---------------------------------------
-# SMARTMOUSE SERVICES
-# ---------------------------------------
 move:
-  description: Send relative mouse movement (Opcode 0x01)
+  name: Move Mouse
+  description: Send relative mouse movement.
+  target:
+    device:
+      integration: smartmouse
   fields:
     x:
-      description: Delta X (signed int16)
-      example: 5
+      name: X Axis
+      description: Relative movement on the X axis.
       required: true
       selector:
         number:
           mode: box
     y:
-      description: Delta Y (signed int16)
-      example: -3
+      name: Y Axis
+      description: Relative movement on the Y axis.
       required: true
       selector:
         number:
           mode: box
 
 move_absolute:
-  description: Send absolute mouse positioning (Opcode 0x02)
+  name: Move Mouse Absolute
+  description: Move mouse to an absolute coordinate.
+  target:
+    device:
+      integration: smartmouse
   fields:
     x:
-      description: Absolute X position (0 to 32767)
-      example: 16384
+      name: X Coordinate
       required: true
       selector:
         number:
-          mode: box
           min: 0
           max: 32767
+          mode: box
     y:
-      description: Absolute Y position (0 to 32767)
-      example: 16384
+      name: Y Coordinate
       required: true
       selector:
         number:
-          mode: box
           min: 0
           max: 32767
+          mode: box
 
 button:
-  description: Send mouse button press, release, or click (Opcodes 0x21, 0x22, 0x23)
+  name: Mouse Button
+  description: Send mouse button press, release, or click.
+  target:
+    device:
+      integration: smartmouse
   fields:
     button:
-      description: Button to control (left/right/middle)
-      example: left
-      required: true
+      name: Button
+      default: left
       selector:
         select:
           options:
@@ -55,9 +61,8 @@ button:
             - right
             - middle
     mode:
-      description: Action to perform (click/down/up)
-      example: click
-      required: true
+      name: Mode
+      default: click
       selector:
         select:
           options:
@@ -65,47 +70,60 @@ button:
             - down
             - up
 
-# ---------------------------------------
-# SCROLL/TOUCHPAD SERVICES
-# ---------------------------------------
 scroll_wheel:
-  description: Scroll using the low-resolution mouse wheel report (Opcode 0x51)
+  name: Scroll Wheel
+  description: Send low-res scroll wheel movement.
+  target:
+    device:
+      integration: smartmouse
   fields:
     delta:
-      description: Wheel delta (signed int16 steps, positive for down/forward)
-      example: 1
+      name: Delta
+      description: Scroll amount.
       required: true
       selector:
         number:
           mode: box
 
 touchpad_scroll:
-  description: Scroll using the high-resolution Precision Touchpad report (Opcode 0x52/0x53)
+  name: Touchpad Scroll
+  description: Send high-res touchpad scroll movement.
+  target:
+    device:
+      integration: smartmouse
   fields:
-    delta:
-      description: High-res scroll delta (signed int16 steps). **Use 0 to send the scroll end gesture (0x53).**
-      example: 10
-      required: true
+    x:
+      name: X Axis
+      default: 0
+      selector:
+        number:
+          mode: box
+    y:
+      name: Y Axis
+      default: 0
       selector:
         number:
           mode: box
 
-# ---------------------------------------
-# KEYBOARD SERVICES (Press, Release, Send)
-# ---------------------------------------
 key_control:
-  description: Send key press, release, or send for a single HID keycode (Opcodes 0x11, 0x12, 0x13)
+  name: Key Control
+  description: Send a key press, release, or send for a single HID keycode.
+  target:
+    device:
+      integration: smartmouse
   fields:
     keycode:
-      description: The **HID Usage Code** (decimal or hex) for the key (e.g., 4 for 'A').
-      example: 4
+      name: Keycode
+      description: The HID keycode to send (0-255).
       required: true
       selector:
-        text:
+        number:
+          min: 0
+          max: 255
+          mode: box
     mode:
-      description: Action to perform (press/release/send)
-      example: send
-      required: true
+      name: Mode
+      default: send
       selector:
         select:
           options:
@@ -114,21 +132,24 @@ key_control:
             - send
 
 media_control:
-  description: Send media key press, release, or send (Opcodes 0x31, 0x32, 0x33)
+  name: Media Control
+  description: Send media key press, release, or send.
+  target:
+    device:
+      integration: smartmouse
   fields:
     code:
-      description: The 16-bit **Consumer Page Usage Code** (e.g., 0xB0 or 176 for Play/Pause). This value is ignored for 'release' mode.
-      example: 176
+      name: Media Code
+      description: The HID consumer control code.
       required: true
       selector:
         number:
-          mode: box
-          min: 1
+          min: 0
           max: 65535
+          mode: box
     mode:
-      description: Action to perform (press/release/send)
-      example: send
-      required: true
+      name: Mode
+      default: send
       selector:
         select:
           options:
@@ -137,14 +158,50 @@ media_control:
             - send
 
 text_send:
-  description: Send a string of text via the keyboard report (Opcode 0x41)
+  name: Send Text
+  description: Send a string of text via the keyboard.
+  target:
+    device:
+      integration: smartmouse
   fields:
     text:
+      name: Text
       description: The text string to type.
-      example: Hello World!
       required: true
       selector:
         text:
 
 reset:
-  description: Reboots the ESP32 device.
+  name: Reset SmartMouse
+  description: Release all modifiers and trigger ESP hardware reset.
+  target:
+    device:
+      integration: smartmouse
+
+pc_power_toggle:
+  name: PC Power Toggle
+  description: Pulse the PC power button.
+  target:
+    device:
+      integration: smartmouse
+
+pc_hard_power_off:
+  name: PC Hard Power Off
+  description: Hold the PC power button for a hard shutdown.
+  target:
+    device:
+      integration: smartmouse
+
+pc_power_on:
+  name: PC Power On
+  description: Turn the PC on if it's currently off.
+  target:
+    device:
+      integration: smartmouse
+
+pc_power_off:
+  name: PC Power Off
+  description: Turn the PC off if it's currently on.
+  target:
+    device:
+      integration: smartmouse

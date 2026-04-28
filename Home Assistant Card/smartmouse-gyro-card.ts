@@ -1,77 +1,72 @@
 import { ServiceManager } from './service-manager';
 import { GyroHandler } from './gyro-handler';
 import { HomeAssistant, SmartMouseConfig } from './types';
+import { LitElement, html, css } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 
-class SmartMouseGyroCardEditor extends HTMLElement {
-  private _config: any;
+@customElement('smartmouse-gyro-card-editor')
+export class SmartMouseGyroCardEditor extends LitElement {
+  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state() private _config!: any;
 
   setConfig(config: any) {
     this._config = config;
-    this.render();
   }
 
-  render() {
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
-    this.shadowRoot!.innerHTML = `
+  private _valueChanged(ev: any, key: string) {
+    if (!this._config) return;
+    const target = ev.target as any;
+    const value = target.type === 'checkbox' ? target.checked : (ev.detail?.value !== undefined ? ev.detail.value : target.value);
+    if (this._config[key] === value) return;
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: { ...this._config, [key]: value } },
+      bubbles: true, composed: true
+    }));
+  }
+
+  protected render() {
+    if (!this._config) return html``;
+    return html`
       <div class="card-config">
         <div class="option">
+          <label>Target Device</label>
+          <ha-selector
+            .hass=${this.hass}
+            .selector=${{ device: {} }}
+            .value=${this._config.device_id || ''}
+            @value-changed=${(e: any) => this._valueChanged(e, 'device_id')}
+          ></ha-selector>
+        </div>
+        <div class="option">
           <label>Gyro Mode</label>
-          <select id="gyro-mode">
-            <option value="relative" ${this._config.gyroMode !== 'absolute' ? 'selected' : ''}>Relative (Standard Air Mouse)</option>
-            <option value="absolute" ${this._config.gyroMode === 'absolute' ? 'selected' : ''}>Absolute (Laser Pointer)</option>
+          <select .value=${this._config.gyroMode || 'relative'} @change=${(e: any) => this._valueChanged(e, 'gyroMode')}>
+            <option value="relative">Relative (Standard Air Mouse)</option>
+            <option value="absolute">Absolute (Laser Pointer)</option>
           </select>
         </div>
         <div class="option">
           <label>Custom Button Text (Optional)</label>
-          <input type="text" id="button-text" value="${this._config.buttonText || ''}" placeholder="Default">
+          <input type="text" .value=${this._config.buttonText || ''} @input=${(e: any) => this._valueChanged(e, 'buttonText')} placeholder="Default">
         </div>
         <div class="option">
           <label>Custom Button Icon (Optional)</label>
-          <input type="text" id="button-icon" value="${this._config.buttonIcon || ''}" placeholder="e.g. mdi:laser-pointer">
+          <input type="text" .value=${this._config.buttonIcon || ''} @input=${(e: any) => this._valueChanged(e, 'buttonIcon')} placeholder="e.g. mdi:laser-pointer">
         </div>
         <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
-          <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" ${this._config.hideText ? 'checked' : ''}>
+          <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" .checked=${this._config.hideText || false} @change=${(e: any) => this._valueChanged(e, 'hideText')}>
           <label style="cursor: pointer;" for="hide-text">Hide Button Text</label>
         </div>
       </div>
-      <style>
-        .card-config { display: flex; flex-direction: column; gap: 12px; }
-        .option { display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); }
-        select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
-      </style>
     `;
-
-    const select = this.shadowRoot!.querySelector("#gyro-mode") as HTMLSelectElement;
-    select.addEventListener("change", () => {
-      const newConfig = { ...this._config, gyroMode: select.value };
-      this.dispatchEvent(new CustomEvent("config-changed", {
-        detail: { config: newConfig },
-        bubbles: true,
-        composed: true,
-      }));
-    });
-
-    ['button-text', 'button-icon'].forEach(id => {
-      const el = this.shadowRoot!.querySelector(`#${id}`) as HTMLInputElement;
-      el.addEventListener("input", (e) => {
-        const key = id === 'button-text' ? 'buttonText' : 'buttonIcon';
-        const val = (e.target as HTMLInputElement).value;
-        const newConfig = { ...this._config, [key]: val };
-        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: newConfig }, bubbles: true, composed: true }));
-      });
-    });
-
-    const hideTextEl = this.shadowRoot!.querySelector("#hide-text") as HTMLInputElement;
-    hideTextEl.addEventListener("change", (e) => {
-      const newConfig = { ...this._config, hideText: (e.target as HTMLInputElement).checked };
-      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: newConfig }, bubbles: true, composed: true }));
-    });
   }
+
+  static styles = css`
+    .card-config { display: flex; flex-direction: column; gap: 12px; }
+    .option { display: flex; flex-direction: column; gap: 4px; }
+    label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); margin: 0; }
+    select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); outline: none; }
+  `;
 }
-customElements.define("smartmouse-gyro-card-editor", SmartMouseGyroCardEditor);
 
 class SmartMouseGyroCard extends HTMLElement {
   private _hass?: HomeAssistant;
@@ -91,7 +86,7 @@ class SmartMouseGyroCard extends HTMLElement {
   setConfig(config: any) { 
     const oldConfig = this._config as any;
     this._config = config; 
-    if (this.rendered && (oldConfig?.gyroMode !== config.gyroMode || oldConfig?.buttonText !== config.buttonText || oldConfig?.buttonIcon !== config.buttonIcon || oldConfig?.hideText !== config.hideText)) {
+    if (this.rendered && (oldConfig?.gyroMode !== config.gyroMode || oldConfig?.buttonText !== config.buttonText || oldConfig?.buttonIcon !== config.buttonIcon || oldConfig?.hideText !== config.hideText || oldConfig?.device_id !== config.device_id)) {
       if (this.shadowRoot) this.shadowRoot.innerHTML = '';
       this.rendered = false;
       this.connectedCallback();

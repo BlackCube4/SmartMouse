@@ -6,7 +6,7 @@ from .const import DOMAIN
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the button platform."""
-    ws_link = hass.data[DOMAIN]
+    ws_link = hass.data[DOMAIN][entry.entry_id]
     entities = [SmartMouseResetButton(ws_link, entry)]
     
     # Create PC Power entities if enabled in config or supported by hardware telemetry

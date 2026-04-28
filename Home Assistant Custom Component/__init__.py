@@ -7,6 +7,7 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, CONF_PASSWORD
 
@@ -61,44 +62,56 @@ PC_CMD_OFF              = 0x04
 SERVICE_MOVE_SCHEMA = vol.Schema({
     vol.Required("x"): vol.Coerce(int),
     vol.Required("y"): vol.Coerce(int),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_MOVE_ABS_SCHEMA = vol.Schema({
     vol.Required("x"): vol.All(vol.Coerce(int), vol.Range(min=0, max=32767)),
     vol.Required("y"): vol.All(vol.Coerce(int), vol.Range(min=0, max=32767)),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_BUTTON_SCHEMA = vol.Schema({
     vol.Optional("button", default="left"): vol.In(["left", "right", "middle"]),
     vol.Optional("mode", default="click"): vol.In(["click", "down", "up"]),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_WHEEL_SCROLL_SCHEMA = vol.Schema({
     vol.Required("delta"): vol.Coerce(int),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_TOUCHPAD_SCROLL_SCHEMA = vol.Schema({
     vol.Optional("x", default=0): vol.Coerce(int),
     vol.Optional("y", default=0): vol.Coerce(int),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_KEY_SCHEMA = vol.Schema({
     vol.Required("keycode"): vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
     vol.Optional("mode", default="send"): vol.In(["press", "release", "send"]),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_MEDIA_SCHEMA = vol.Schema({
     vol.Required("code"): vol.All(vol.Coerce(int), vol.Range(min=0, max=0xFFFF)),
     vol.Optional("mode", default="send"): vol.In(["press", "release", "send"]),
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
 SERVICE_TEXT_SCHEMA = vol.Schema({
     vol.Required("text"): cv.string,
+    vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
-SERVICE_RESET_SCHEMA = vol.Schema({})
+SERVICE_RESET_SCHEMA = vol.Schema({
+    vol.Optional("device_id"): vol.Any(cv.string, list),
+})
 
-SERVICE_PC_POWER_SCHEMA = vol.Schema({})
+SERVICE_PC_POWER_SCHEMA = vol.Schema({
+    vol.Optional("device_id"): vol.Any(cv.string, list),
+})
 
 SERVICE_MAP = {
     "move": (OPCODE_MOUSE_RELATIVE, "<Bhh", ["x", "y"]),
@@ -121,17 +134,47 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     password = entry.data.get(CONF_PASSWORD, "")
 
     ws_link = SmartMouseConnection(host, port, password, entry)
-    hass.data[DOMAIN] = ws_link
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    hass.data[DOMAIN][entry.entry_id] = ws_link
     hass.async_create_task(ws_link.run_forever())
 
     # Forward setup to platforms (like binary_sensor)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Only register services once globally
+    if hass.data.get(f"{DOMAIN}_services_registered"):
+        return True
+    hass.data[f"{DOMAIN}_services_registered"] = True
+
+    def get_ws_link(call):
+        device_ids = call.data.get("device_id")
+        if not device_ids:
+            if hass.data.get(DOMAIN):
+                return next(iter(hass.data[DOMAIN].values()))
+            return None
+            
+        if isinstance(device_ids, str):
+            device_ids = [device_ids]
+            
+        registry = dr.async_get(hass)
+        for device_id in device_ids:
+            device = registry.async_get(device_id)
+            if device:
+                for entry_id in device.config_entries:
+                    if link := hass.data.get(DOMAIN, {}).get(entry_id):
+                        return link
+        
+        _LOGGER.warning("SmartMouse device_id %s not found or inactive.", device_ids)
+        return None
 
     # --- service handlers ---
     
     # 0x01: RELATIVE MOUSE MOVE
     async def handle_move(call):
         """Send relative mouse movement (dx, dy)."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         dx = int(call.data.get("x", 0))
         dy = int(call.data.get("y", 0))
         
@@ -142,6 +185,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x02: ABSOLUTE MOUSE MOVE
     async def handle_move_absolute(call):
         """Send absolute mouse movement (x, y)."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         x = int(call.data.get("x", 0))
         y = int(call.data.get("y", 0))
         
@@ -152,6 +197,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x21, 0x22, 0x23: MOUSE BUTTON
     async def handle_button(call):
         """Send mouse button press, release, or click."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         btn_name = call.data.get("button", "left").lower()
         mode = call.data.get("mode", "click").lower()
         
@@ -182,6 +229,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x51: MOUSE WHEEL SCROLL
     async def handle_scroll_wheel(call):
         """Send low-res scroll wheel movement."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         delta = int(call.data.get("delta", 0))
 
         # Format: 0x41 | int8 value (2 bytes total) to match README/WebUI
@@ -191,6 +240,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x42, 0x4F: TOUCHPAD SCROLL
     async def handle_touchpad_scroll(call):
         """Send high-res touchpad scroll movement (dx, dy) or scroll end (dx=0, dy=0)."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         x = int(call.data.get("x", 0))
         y = int(call.data.get("y", 0))
         
@@ -208,6 +259,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x11, 0x12, 0x13: KEYBOARD CONTROL
     async def handle_key_control(call):
         """Send key press, release, or send for a single HID keycode."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         keycode = int(call.data.get("keycode", 0))
         mode = call.data.get("mode", "send").lower()
         
@@ -228,6 +281,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x31, 0x32, 0x33: MEDIA/CONSUMER CONTROL
     async def handle_media_control(call):
         """Send media key press, release, or send."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         code = int(call.data.get("code", 0))
         mode = call.data.get("mode", "send").lower()
 
@@ -252,6 +307,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0x41: TEXT SEND
     async def handle_text_send(call):
         """Send a string of text via the keyboard report."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         text = call.data.get("text", "")
         if not text:
             return
@@ -264,6 +321,8 @@ async def async_setup_entry(hass, entry: ConfigEntry):
     # 0xFE: SYSTEM RESET
     async def handle_reset(call):
         """Release all modifiers and trigger ESP hardware reset."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         # 1. Release all 8 HID modifier keys (0xE0 to 0xE7 / 224 to 231)
         for code in range(0xE0, 0xE8):
             packet = struct.pack("<BB", OPCODE_KEY_RELEASE, code)
@@ -275,21 +334,29 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
     async def handle_pc_toggle(call):
         """Pulse the PC power button."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_TOGGLE)
         await ws_link.send(packet, binary=True)
 
     async def handle_pc_hard_off(call):
         """Hold the PC power button for a hard shutdown."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_HARD_OFF)
         await ws_link.send(packet, binary=True)
 
     async def handle_pc_on(call):
         """Turn the PC on if it's currently off."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_ON)
         await ws_link.send(packet, binary=True)
 
     async def handle_pc_off(call):
         """Turn the PC off if it's currently on."""
+        ws_link = get_ws_link(call)
+        if not ws_link: return
         packet = struct.pack("<BB", OPCODE_PC_CONTROL, PC_CMD_OFF)
         await ws_link.send(packet, binary=True)
 
@@ -317,7 +384,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
 async def async_unload_entry(hass, entry: ConfigEntry):
     """Unload a config entry."""
-    ws_link = hass.data.pop(DOMAIN)
+    ws_link = hass.data[DOMAIN].pop(entry.entry_id)
     await ws_link.stop_forever()
     return True
 
