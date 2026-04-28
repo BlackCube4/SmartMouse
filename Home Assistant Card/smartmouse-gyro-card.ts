@@ -23,12 +23,24 @@ class SmartMouseGyroCardEditor extends HTMLElement {
             <option value="absolute" ${this._config.gyroMode === 'absolute' ? 'selected' : ''}>Absolute (Laser Pointer)</option>
           </select>
         </div>
+        <div class="option">
+          <label>Custom Button Text (Optional)</label>
+          <input type="text" id="button-text" value="${this._config.buttonText || ''}" placeholder="Default">
+        </div>
+        <div class="option">
+          <label>Custom Button Icon (Optional)</label>
+          <input type="text" id="button-icon" value="${this._config.buttonIcon || ''}" placeholder="e.g. mdi:laser-pointer">
+        </div>
+        <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
+          <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" ${this._config.hideText ? 'checked' : ''}>
+          <label style="cursor: pointer;" for="hide-text">Hide Button Text</label>
+        </div>
       </div>
       <style>
         .card-config { display: flex; flex-direction: column; gap: 12px; }
         .option { display: flex; flex-direction: column; gap: 4px; }
         label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); }
-        select { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
+        select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
       </style>
     `;
 
@@ -41,13 +53,29 @@ class SmartMouseGyroCardEditor extends HTMLElement {
         composed: true,
       }));
     });
+
+    ['button-text', 'button-icon'].forEach(id => {
+      const el = this.shadowRoot!.querySelector(`#${id}`) as HTMLInputElement;
+      el.addEventListener("input", (e) => {
+        const key = id === 'button-text' ? 'buttonText' : 'buttonIcon';
+        const val = (e.target as HTMLInputElement).value;
+        const newConfig = { ...this._config, [key]: val };
+        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: newConfig }, bubbles: true, composed: true }));
+      });
+    });
+
+    const hideTextEl = this.shadowRoot!.querySelector("#hide-text") as HTMLInputElement;
+    hideTextEl.addEventListener("change", (e) => {
+      const newConfig = { ...this._config, hideText: (e.target as HTMLInputElement).checked };
+      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: newConfig }, bubbles: true, composed: true }));
+    });
   }
 }
 customElements.define("smartmouse-gyro-card-editor", SmartMouseGyroCardEditor);
 
 class SmartMouseGyroCard extends HTMLElement {
   private _hass?: HomeAssistant;
-  private _config: SmartMouseConfig = {} as SmartMouseConfig;
+  private _config: any = {};
   private serviceManager!: ServiceManager;
   private gyroHandler!: GyroHandler;
   private rendered = false;
@@ -63,7 +91,7 @@ class SmartMouseGyroCard extends HTMLElement {
   setConfig(config: any) { 
     const oldConfig = this._config as any;
     this._config = config; 
-    if (this.rendered && oldConfig?.gyroMode !== config.gyroMode) {
+    if (this.rendered && (oldConfig?.gyroMode !== config.gyroMode || oldConfig?.buttonText !== config.buttonText || oldConfig?.buttonIcon !== config.buttonIcon || oldConfig?.hideText !== config.hideText)) {
       if (this.shadowRoot) this.shadowRoot.innerHTML = '';
       this.rendered = false;
       this.connectedCallback();
@@ -95,18 +123,21 @@ class SmartMouseGyroCard extends HTMLElement {
       const btn = document.createElement("button");
       Object.assign(btn.style, {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "12px", borderRadius: "8px", background: "var(--dark, #2b2c2f)",
+        padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", background: "var(--dark, #2b2c2f)",
         color: "var(--primary-text-color, #fff)", border: "none", cursor: "pointer", touchAction: "none"
       });
-      btn.innerHTML = `<ha-icon icon="${icon}" style="margin-bottom: 4px; pointer-events: none;"></ha-icon>${text}`;
+      const iconMargin = text ? "4px" : "0px";
+      btn.innerHTML = `<ha-icon icon="${icon}" style="margin-bottom: ${iconMargin}; pointer-events: none;"></ha-icon>${text}`;
       if (handler) btn.addEventListener("click", handler);
       return btn;
     };
 
     const isAbsolute = (this._config as any).gyroMode === "absolute";
+    const btnText = this._config.hideText ? "" : (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative"));
+    const btnIcon = this._config.buttonIcon || (isAbsolute ? "mdi:bullseye" : "mdi:ray-start-arrow");
 
     if (isAbsolute) {
-      const absBtn = createBtn("Absolute", "mdi:bullseye");
+      const absBtn = createBtn(btnText, btnIcon);
       
       let pressTimer: number | null = null;
       let isLongPress = false;
@@ -150,7 +181,7 @@ class SmartMouseGyroCard extends HTMLElement {
 
       root.append(absBtn);
     } else {
-      const relBtn = createBtn("Relative", "mdi:ray-start-arrow", () => {
+      const relBtn = createBtn(btnText, btnIcon, () => {
         this.gyroHandler.toggleGyroRelative().then(() => {
           relBtn.style.background = this.gyroHandler.gyroRelativeActive ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
         });
@@ -185,5 +216,6 @@ customElements.define("smartmouse-gyro-card", SmartMouseGyroCard);
 (window as any).customCards.push({
   type: "smartmouse-gyro-card",
   name: "SmartMouse Gyro",
-  description: "Gyroscope controls (Air Mouse) for SmartMouse."
+  description: "Gyroscope controls (Air Mouse) for SmartMouse.",
+  preview: true
 });

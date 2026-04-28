@@ -27,7 +27,7 @@ class SmartMouseInputCardEditor extends HTMLElement {
         .card-config { display: flex; flex-direction: column; gap: 12px; }
         .option { display: flex; flex-direction: column; gap: 4px; }
         label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); }
-        select { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
+        select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); }
       </style>
     `;
 
@@ -46,7 +46,7 @@ customElements.define("smartmouse-input-card-editor", SmartMouseInputCardEditor)
 
 class SmartMouseInputCard extends HTMLElement {
   private _hass?: HomeAssistant;
-  private _config: SmartMouseConfig = {} as SmartMouseConfig;
+  private _config: any = {};
   private serviceManager!: ServiceManager;
   private rendered = false;
   private lastInputValue = " ";
@@ -68,7 +68,7 @@ class SmartMouseInputCard extends HTMLElement {
     const oldConfig = this._config as any;
     this._config = config; 
     
-    if (this.rendered && oldConfig?.inputType !== config.inputType) {
+    if (this.rendered && (oldConfig?.inputType !== config.inputType)) {
       if (this.shadowRoot) this.shadowRoot.innerHTML = '';
       this.rendered = false;
       this.connectedCallback();
@@ -110,8 +110,8 @@ class SmartMouseInputCard extends HTMLElement {
       liveInput.type = "password"; 
       liveInput.value = " ";
       Object.assign(liveInput.style, {
-        width: "100%", padding: "12px", borderRadius: "8px", boxSizing: "border-box",
-        background: "var(--dark, #2a2b2e)", border: "1px solid #3a3b3d",
+        width: "100%", padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", boxSizing: "border-box",
+        background: "var(--dark, #2a2b2e)", border: "0px",
         color: "transparent", fontSize: "14px", textAlign: "center"
       });
 
@@ -154,8 +154,8 @@ class SmartMouseInputCard extends HTMLElement {
       textInput.type = "text";
       textInput.placeholder = "Type to send...";
       Object.assign(textInput.style, {
-        flex: "1", padding: "12px", borderRadius: "8px", boxSizing: "border-box",
-        background: "var(--dark, #2a2b2e)", border: "1px solid #3a3b3d",
+        flex: "1", padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", boxSizing: "border-box",
+        background: "var(--dark, #2a2b2e)", border: "0px",
         color: "var(--primary-text-color, #fff)", fontSize: "14px", outline: "none"
       });
 
@@ -185,5 +185,6 @@ customElements.define("smartmouse-input-card", SmartMouseInputCard);
 (window as any).customCards.push({
   type: "smartmouse-input-card",
   name: "SmartMouse Input",
-  description: "Text input buffers for SmartMouse."
+  description: "Text input buffers for SmartMouse.",
+  preview: true
 });

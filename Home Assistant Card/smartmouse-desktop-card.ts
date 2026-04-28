@@ -155,5 +155,6 @@ customElements.define("smartmouse-desktop-card", SmartMouseDesktopCard);
 (window as any).customCards.push({
   type: "smartmouse-desktop-card",
   name: "SmartMouse Desktop",
-  description: "Desktop lock card for mouse and keyboard passthrough."
+  description: "Desktop lock card for mouse and keyboard passthrough.",
+  preview: true
 });

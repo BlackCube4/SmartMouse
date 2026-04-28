@@ -95,5 +95,6 @@ customElements.define("smartmouse-touchpad-card", SmartMouseTouchpadCard);
 (window as any).customCards.push({
   type: "smartmouse-touchpad-card",
   name: "SmartMouse Touchpad",
-  description: "Touchpad and scroll area for SmartMouse."
+  description: "Touchpad and scroll area for SmartMouse.",
+  preview: true
 });

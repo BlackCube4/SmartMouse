@@ -3,3 +3,5 @@ import './smartmouse-touchpad-card';
 import './smartmouse-desktop-card';
 import './smartmouse-gyro-card';
 import './smartmouse-input-card';
+import './smartmouse-modifier-card';
+import './container-card';
