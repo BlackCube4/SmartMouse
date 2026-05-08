@@ -109,16 +109,30 @@ class SmartMouseInputCard extends HTMLElement {
 
     if (isLive) {
       // --- LIVE INPUT WRAPPER ---
-      const liveWrapper = document.createElement("form");
+      const liveWrapper = document.createElement("div");
       Object.assign(liveWrapper.style, { position: "relative", width: "100%", margin: "0", padding: "0" });
       
-      liveWrapper.addEventListener("submit", (e) => {
-        e.preventDefault();
-        this.serviceManager.sendKey(40, "send"); // Enter
+      liveWrapper.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.serviceManager.sendKey(40, "send"); // Enter
+          setTimeout(() => {
+            liveInput.value = " ";
+            this.lastInputValue = " ";
+          }, 0);
+        }
       });
 
       const liveInput = document.createElement("input");
       liveInput.type = "password"; 
+      liveInput.setAttribute("data-1p-ignore", "true");
+      liveInput.setAttribute("data-bwignore", "true");
+      liveInput.setAttribute("data-lpignore", "true");
+      liveInput.setAttribute("data-form-type", "other");
+      liveInput.autocomplete = "off";
+      liveInput.setAttribute("autocorrect", "off");
+      liveInput.setAttribute("autocapitalize", "none");
+      liveInput.spellcheck = false;
       liveInput.value = " ";
       Object.assign(liveInput.style, {
         width: "100%", padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", boxSizing: "border-box",
@@ -153,7 +167,7 @@ class SmartMouseInputCard extends HTMLElement {
         }
 
         this.lastInputValue = val;
-        if (val.length > 30) setTimeout(() => { liveInput.value = " "; this.lastInputValue = " "; }, 0);
+        setTimeout(() => { liveInput.value = " "; this.lastInputValue = " "; }, 0);
       });
 
       liveInput.addEventListener("blur", () => { liveInput.value = " "; this.lastInputValue = " "; });

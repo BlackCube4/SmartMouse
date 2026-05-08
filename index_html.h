@@ -1313,19 +1313,17 @@ const char* INDEX_HTML = R"rawliteral(
       const textRow = document.createElement("div");
       Object.assign(textRow.style, { display: "flex", gap: "6px", alignItems: "center" });
 
-      const liveWrapper = document.createElement("form");
+      const liveWrapper = document.createElement("div");
       Object.assign(liveWrapper.style, { position: "relative", width: "15%", margin: "0", padding: "0" });
-      
-      liveWrapper.addEventListener("submit", (e) => {
-        e.preventDefault();
-        touchpadHandler.serviceManager.sendKey(40, "send"); // Enter key
-        setTimeout(() => liveInput.focus(), 0);
-      });
       
       const ANCHOR = " "; 
       this.lastInputValue = ANCHOR;
       const liveInput = document.createElement("input");
       liveInput.type = "password"; 
+      liveInput.setAttribute("data-1p-ignore", "true");
+      liveInput.setAttribute("data-bwignore", "true");
+      liveInput.setAttribute("data-lpignore", "true");
+      liveInput.setAttribute("data-form-type", "other");
       liveInput.autocomplete = "off"; liveInput.autocorrect = "off";
       liveInput.autocapitalize = "off"; liveInput.spellcheck = false;
       liveInput.enterKeyHint = "enter";
@@ -1380,11 +1378,9 @@ const char* INDEX_HTML = R"rawliteral(
             }
         }
         this.lastInputValue = val;
-        if (val.length > 30) {
-            setTimeout(() => {
-                liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd();
-            }, 0);
-        }
+        setTimeout(() => {
+            liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd();
+        }, 0);
       });
       
       liveInput.addEventListener("blur", () => {
@@ -1397,6 +1393,14 @@ const char* INDEX_HTML = R"rawliteral(
           e.preventDefault();
           const code = this.getHIDKeycodeFromEvent(e);
           if (code) touchpadHandler.serviceManager.sendKey(code, "send");
+          
+          if (e.key === "Enter") {
+            setTimeout(() => {
+              liveInput.value = ANCHOR;
+              this.lastInputValue = ANCHOR;
+              ensureCursorAtEnd();
+            }, 0);
+          }
         }
       });
 

@@ -11,6 +11,8 @@ export interface SmartMouseConfig {
   movement_deadzone?: number;
   debug?: boolean;
   debugPrint?: boolean;
+  scrollType?: "touchpad" | "wheel";
+  invertScroll?: boolean;
 }
 
 export interface HomeAssistant {

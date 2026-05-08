@@ -25,6 +25,15 @@ export class TouchpadHandler {
     this.startFrameLoop();
   }
 
+  updateConfig(config: SmartMouseConfig) {
+    this.config = config;
+    this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
+    this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
+    this.CLICK_DELAY = config.double_click_time ?? 250;
+    this.HOLD_TIME = config.hold_time ?? 400;
+    this.DEADZONE = config.movement_deadzone ?? 3;
+  }
+
   private startFrameLoop() {
     const frameLoop = () => {
       const dx = this.floatDX > 0 ? Math.floor(this.floatDX) : Math.ceil(this.floatDX);
@@ -223,7 +232,13 @@ export class TouchpadHandler {
 
       const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
       if (Math.abs(scrollAmount) >= 1) {
-        this.serviceManager.sendTouchpadScroll(0, scrollAmount);
+        const finalScroll = this.config.invertScroll ? -scrollAmount : scrollAmount;
+        if (this.config.scrollType === 'wheel') {
+          // Standard wheel conventionally expects inverted Y relative to the touchpad gesture
+          this.serviceManager.sendScrollWheel(-finalScroll);
+        } else {
+          this.serviceManager.sendTouchpadScroll(0, finalScroll);
+        }
         accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
       }
     };
@@ -233,7 +248,9 @@ export class TouchpadHandler {
       e.preventDefault();
       scrolling = false;
       accumulatedScroll = 0;
-      this.serviceManager.sendTouchpadScroll(0, 0);
+      if (this.config.scrollType !== 'wheel') {
+        this.serviceManager.sendTouchpadScroll(0, 0);
+      }
     };
 
     scrollArea.addEventListener("touchstart", startScroll as EventListener, { passive: false });
