@@ -1,121 +1,51 @@
-import { ServiceManager } from './service-manager';
 import { TouchpadHandler } from './touchpad-handler';
-import { HomeAssistant, SmartMouseConfig } from './types';
-import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { html } from 'lit';
+import { customElement } from 'lit/decorators.js';
 
 @customElement('smartmouse-touchpad-card-editor')
-export class SmartMouseTouchpadCardEditor extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
-  @state() private _config!: any;
-
-  setConfig(config: any) {
-    this._config = config;
-  }
-
-  private _valueChanged(ev: any, key: string) {
-    if (!this._config) return;
-    const target = ev.target as any;
-    let value = target.type === 'checkbox' ? target.checked : (ev.detail?.value !== undefined ? ev.detail.value : target.value);
-    if (target.type === 'number' && value !== '') {
-      value = parseFloat(value);
-    }
-    if (this._config[key] === value) return;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: { ...this._config, [key]: value } },
-      bubbles: true, composed: true
-    }));
-  }
-
-  protected render() {
-    if (!this._config) return html``;
+export class SmartMouseTouchpadCardEditor extends SmartMouseCardEditorBase {
+  protected renderExtraOptions() {
     return html`
-      <div class="card-config">
-        <div class="option">
-          <label>Target Device</label>
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ device: {} }}
-            .value=${this._config.device_id || ''}
-            @value-changed=${(e: any) => this._valueChanged(e, 'device_id')}
-          ></ha-selector>
-        </div>
-        <div class="option">
-          <label>Touchpad Sensitivity (Default: 1.8)</label>
-          <input type="number" step="0.1" .value=${this._config.mouseSensitivity ?? 1.8} @input=${(e: any) => this._valueChanged(e, 'mouseSensitivity')}>
-        </div>
-        <div class="option">
-          <label>Scroll Sensitivity (Default: 3.0)</label>
-          <input type="number" step="0.1" .value=${this._config.scrollSensitivity ?? 3.0} @input=${(e: any) => this._valueChanged(e, 'scrollSensitivity')}>
-        </div>
-        <div class="option">
-          <label>Scroll Type</label>
-          <select .value=${this._config.scrollType || 'touchpad'} @change=${(e: any) => this._valueChanged(e, 'scrollType')}>
-            <option value="touchpad">High-Resolution (Precision Touchpad)</option>
-            <option value="wheel">Standard (Mouse Wheel)</option>
-          </select>
-        </div>
-        <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
-          <input type="checkbox" id="invert-scroll" style="width: auto; margin: 0;" .checked=${this._config.invertScroll || false} @change=${(e: any) => this._valueChanged(e, 'invertScroll')}>
-          <label style="cursor: pointer;" for="invert-scroll">Invert Scroll Direction</label>
-        </div>
+      <div class="option">
+        <label>Touchpad Sensitivity (Default: 1.8)</label>
+        <input type="number" step="0.1" .value=${this._config.mouseSensitivity ?? 1.8} @input=${(e: any) => this._valueChanged(e, 'mouseSensitivity')}>
+      </div>
+      <div class="option">
+        <label>Scroll Sensitivity (Default: 3.0)</label>
+        <input type="number" step="0.1" .value=${this._config.scrollSensitivity ?? 3.0} @input=${(e: any) => this._valueChanged(e, 'scrollSensitivity')}>
+      </div>
+      <div class="option">
+        <label>Scroll Type</label>
+        <select .value=${this._config.scrollType || 'touchpad'} @change=${(e: any) => this._valueChanged(e, 'scrollType')}>
+          <option value="touchpad">High-Resolution (Precision Touchpad)</option>
+          <option value="wheel">Standard (Mouse Wheel)</option>
+        </select>
+      </div>
+      <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
+        <input type="checkbox" id="invert-scroll" style="width: auto; margin: 0;" .checked=${this._config.invertScroll || false} @change=${(e: any) => this._valueChanged(e, 'invertScroll')}>
+        <label style="cursor: pointer;" for="invert-scroll">Invert Scroll Direction</label>
       </div>
     `;
   }
-
-  static styles = css`
-    .card-config { display: flex; flex-direction: column; gap: 12px; }
-    .option { display: flex; flex-direction: column; gap: 4px; }
-    label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); margin: 0; }
-    input, select { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); outline: none; }
-  `;
 }
 
-class SmartMouseTouchpadCard extends HTMLElement {
-  private _hass?: HomeAssistant;
-  private _config: SmartMouseConfig = {} as SmartMouseConfig;
-  private serviceManager!: ServiceManager;
+class SmartMouseTouchpadCard extends SmartMouseCardBase {
   private touchpadHandler!: TouchpadHandler;
-  private rendered = false;
 
   static getConfigElement() { return document.createElement("smartmouse-touchpad-card-editor"); }
   static getStubConfig() { return { type: "custom:smartmouse-touchpad-card" }; }
 
-  constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
-  }
-
-  setConfig(config: SmartMouseConfig) {
-    const oldConfig = this._config as any;
-    this._config = config;
-
+  protected onConfigUpdated(config: any) {
     if (this.serviceManager) {
       this.serviceManager.config = config;
     }
     if (this.touchpadHandler) {
       this.touchpadHandler.updateConfig(config);
     }
-
-    if (this.rendered && oldConfig?.device_id !== config.device_id) {
-      if (this.shadowRoot) this.shadowRoot.innerHTML = '';
-      this.rendered = false;
-      this.connectedCallback();
-    }
   }
 
-  set hass(hass: HomeAssistant) {
-    this._hass = hass;
-    if (this.serviceManager) {
-      this.serviceManager.hass = hass;
-    }
-  }
-
-  connectedCallback() {
-    if (this.rendered) return;
-    this.rendered = true;
-
-    this.serviceManager = new ServiceManager(this._hass, this._config);
+  protected buildCard() {
     this.touchpadHandler = new TouchpadHandler(this.serviceManager, this._config);
 
     const root = document.createElement("div");

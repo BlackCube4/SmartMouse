@@ -1,107 +1,46 @@
-import { ServiceManager } from './service-manager';
 import { GyroHandler } from './gyro-handler';
-import { HomeAssistant, SmartMouseConfig } from './types';
-import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { html } from 'lit';
+import { customElement } from 'lit/decorators.js';
 
 @customElement('smartmouse-gyro-card-editor')
-export class SmartMouseGyroCardEditor extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
-  @state() private _config!: any;
-
-  setConfig(config: any) {
-    this._config = config;
-  }
-
-  private _valueChanged(ev: any, key: string) {
-    if (!this._config) return;
-    const target = ev.target as any;
-    const value = target.type === 'checkbox' ? target.checked : (ev.detail?.value !== undefined ? ev.detail.value : target.value);
-    if (this._config[key] === value) return;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: { ...this._config, [key]: value } },
-      bubbles: true, composed: true
-    }));
-  }
-
-  protected render() {
-    if (!this._config) return html``;
+export class SmartMouseGyroCardEditor extends SmartMouseCardEditorBase {
+  protected renderExtraOptions() {
     return html`
-      <div class="card-config">
-        <div class="option">
-          <label>Target Device</label>
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ device: {} }}
-            .value=${this._config.device_id || ''}
-            @value-changed=${(e: any) => this._valueChanged(e, 'device_id')}
-          ></ha-selector>
-        </div>
-        <div class="option">
-          <label>Gyro Mode</label>
-          <select .value=${this._config.gyroMode || 'relative'} @change=${(e: any) => this._valueChanged(e, 'gyroMode')}>
-            <option value="relative">Relative (Standard Air Mouse)</option>
-            <option value="absolute">Absolute (Laser Pointer)</option>
-          </select>
-        </div>
-        <div class="option">
-          <label>Custom Button Text (Optional)</label>
-          <input type="text" .value=${this._config.buttonText || ''} @input=${(e: any) => this._valueChanged(e, 'buttonText')} placeholder="Default">
-        </div>
-        <div class="option">
-          <label>Custom Button Icon (Optional)</label>
-          <input type="text" .value=${this._config.buttonIcon || ''} @input=${(e: any) => this._valueChanged(e, 'buttonIcon')} placeholder="e.g. mdi:laser-pointer">
-        </div>
-        <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
-          <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" .checked=${this._config.hideText || false} @change=${(e: any) => this._valueChanged(e, 'hideText')}>
-          <label style="cursor: pointer;" for="hide-text">Hide Button Text</label>
-        </div>
+      <div class="option">
+        <label>Gyro Mode</label>
+        <select .value=${this._config.gyroMode || 'relative'} @change=${(e: any) => this._valueChanged(e, 'gyroMode')}>
+          <option value="relative">Relative (Standard Air Mouse)</option>
+          <option value="absolute">Absolute (Laser Pointer)</option>
+        </select>
+      </div>
+      <div class="option">
+        <label>Custom Button Text (Optional)</label>
+        <input type="text" .value=${this._config.buttonText || ''} @input=${(e: any) => this._valueChanged(e, 'buttonText')} placeholder="Default">
+      </div>
+      <div class="option">
+        <label>Custom Button Icon (Optional)</label>
+        <input type="text" .value=${this._config.buttonIcon || ''} @input=${(e: any) => this._valueChanged(e, 'buttonIcon')} placeholder="e.g. mdi:laser-pointer">
+      </div>
+      <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
+        <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" .checked=${this._config.hideText || false} @change=${(e: any) => this._valueChanged(e, 'hideText')}>
+        <label style="cursor: pointer;" for="hide-text">Hide Button Text</label>
       </div>
     `;
   }
-
-  static styles = css`
-    .card-config { display: flex; flex-direction: column; gap: 12px; }
-    .option { display: flex; flex-direction: column; gap: 4px; }
-    label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); margin: 0; }
-    select, input { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); outline: none; }
-  `;
 }
 
-class SmartMouseGyroCard extends HTMLElement {
-  private _hass?: HomeAssistant;
-  private _config: any = {};
-  private serviceManager!: ServiceManager;
+class SmartMouseGyroCard extends SmartMouseCardBase {
   private gyroHandler!: GyroHandler;
-  private rendered = false;
 
   static getConfigElement() { return document.createElement("smartmouse-gyro-card-editor"); }
   static getStubConfig() { return { type: "custom:smartmouse-gyro-card", gyroMode: "relative" }; }
 
-  constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
+  protected reconnectKeys() {
+    return ['device_id', 'gyroMode', 'buttonText', 'buttonIcon', 'hideText'];
   }
 
-  setConfig(config: any) { 
-    const oldConfig = this._config as any;
-    this._config = config; 
-    if (this.rendered && (oldConfig?.gyroMode !== config.gyroMode || oldConfig?.buttonText !== config.buttonText || oldConfig?.buttonIcon !== config.buttonIcon || oldConfig?.hideText !== config.hideText || oldConfig?.device_id !== config.device_id)) {
-      if (this.shadowRoot) this.shadowRoot.innerHTML = '';
-      this.rendered = false;
-      this.connectedCallback();
-    }
-  }
-  set hass(hass: HomeAssistant) {
-    this._hass = hass;
-    if (this.serviceManager) this.serviceManager.hass = hass;
-  }
-
-  connectedCallback() {
-    if (this.rendered) return;
-    this.rendered = true;
-
-    this.serviceManager = new ServiceManager(this._hass, this._config);
+  protected buildCard() {
     this.gyroHandler = new GyroHandler(this.serviceManager, this._config);
 
     const root = document.createElement("div");
