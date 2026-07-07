@@ -8,6 +8,7 @@ export class TouchpadHandler {
   private velocityY = 0;
   private lastTouchTime = 0;
   private isTouchActive = false;
+  private frameLoopRunning = false;
 
   private TOUCH_GAIN: number;
   private SCROLL_GAIN: number;
@@ -21,8 +22,6 @@ export class TouchpadHandler {
     this.CLICK_DELAY = config.double_click_time ?? 250;
     this.HOLD_TIME = config.hold_time ?? 400;
     this.DEADZONE = config.movement_deadzone ?? 3;
-    
-    this.startFrameLoop();
   }
 
   updateConfig(config: SmartMouseConfig) {
@@ -34,7 +33,11 @@ export class TouchpadHandler {
     this.DEADZONE = config.movement_deadzone ?? 3;
   }
 
-  private startFrameLoop() {
+  // Runs only while there is pending movement to flush, instead of forever.
+  private ensureFrameLoop() {
+    if (this.frameLoopRunning) return;
+    this.frameLoopRunning = true;
+
     const frameLoop = () => {
       const dx = this.floatDX > 0 ? Math.floor(this.floatDX) : Math.ceil(this.floatDX);
       const dy = this.floatDY > 0 ? Math.floor(this.floatDY) : Math.ceil(this.floatDY);
@@ -44,7 +47,12 @@ export class TouchpadHandler {
         this.floatDY -= dy;
         this.serviceManager.sendMove(dx, dy);
       }
-      requestAnimationFrame(frameLoop);
+
+      if (Math.abs(this.floatDX) > 0.0001 || Math.abs(this.floatDY) > 0.0001) {
+        requestAnimationFrame(frameLoop);
+      } else {
+        this.frameLoopRunning = false;
+      }
     };
     requestAnimationFrame(frameLoop);
   }
@@ -52,6 +60,7 @@ export class TouchpadHandler {
   private addMovement(dx: number, dy: number) {
     this.floatDX += dx;
     this.floatDY += dy;
+    this.ensureFrameLoop();
   }
 
   private runMomentum(onComplete?: () => void) {
