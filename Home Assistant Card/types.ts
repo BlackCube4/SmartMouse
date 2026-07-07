@@ -5,10 +5,10 @@ export interface SmartMouseConfig {
   scrollSensitivity?: number;
   gyroSensitivity?: number;
   smoothing?: number;
-  suppression_offset?: number;
-  double_click_time?: number;
-  hold_time?: number;
-  movement_deadzone?: number;
+  suppressionOffset?: number;
+  doubleClickTime?: number;
+  holdTime?: number;
+  movementDeadzone?: number;
   debug?: boolean;
   debugPrint?: boolean;
   scrollType?: "touchpad" | "wheel";

@@ -43,7 +43,7 @@ export class GyroHandler {
   constructor(private serviceManager: ServiceManager, private config: SmartMouseConfig) {
     this.GAIN = config.gyroSensitivity ?? 8.0; 
     this.SMOOTHING = config.smoothing ?? 0.15; 
-    this.SUPPRESSION_OFFSET = config.suppression_offset ?? 20;
+    this.SUPPRESSION_OFFSET = config.suppressionOffset ?? 20;
 
     setInterval(() => this.processLoop(), 10);
     this.loadCalibration();

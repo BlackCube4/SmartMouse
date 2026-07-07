@@ -19,18 +19,18 @@ export class TouchpadHandler {
   constructor(private serviceManager: ServiceManager, private config: SmartMouseConfig) {
     this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
     this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
-    this.CLICK_DELAY = config.double_click_time ?? 250;
-    this.HOLD_TIME = config.hold_time ?? 400;
-    this.DEADZONE = config.movement_deadzone ?? 3;
+    this.CLICK_DELAY = config.doubleClickTime ?? 250;
+    this.HOLD_TIME = config.holdTime ?? 400;
+    this.DEADZONE = config.movementDeadzone ?? 3;
   }
 
   updateConfig(config: SmartMouseConfig) {
     this.config = config;
     this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
     this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
-    this.CLICK_DELAY = config.double_click_time ?? 250;
-    this.HOLD_TIME = config.hold_time ?? 400;
-    this.DEADZONE = config.movement_deadzone ?? 3;
+    this.CLICK_DELAY = config.doubleClickTime ?? 250;
+    this.HOLD_TIME = config.holdTime ?? 400;
+    this.DEADZONE = config.movementDeadzone ?? 3;
   }
 
   // Runs only while there is pending movement to flush, instead of forever.
