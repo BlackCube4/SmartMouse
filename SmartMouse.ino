@@ -39,7 +39,7 @@ DNSServer dnsServer;
 // Power Management
 unsigned long lastActivityTime = 0;
 bool isPowerSaving = false;
-const unsigned long SLEEP_TIMEOUT = 1 * 60 * 1000; // 20 minutes
+const unsigned long SLEEP_TIMEOUT = 1 * 60 * 1000; // 1 minute
 
 // Telemetry Timing
 unsigned long lastTelemetryTime = 0;
@@ -51,8 +51,9 @@ const float TEMP_LIMIT_HIGH = 80.0; // Celsius - Start throttling
 const float TEMP_LIMIT_LOW  = 60.0; // Celsius - Resume high performance
 
 // Security
-const char* secret_key = DEFAULT_SECRET; 
-bool client_authenticated[16] = {false};   // Track authentication per-client
+const char* secret_key = DEFAULT_SECRET;
+#define MAX_WS_CLIENTS 16
+bool client_authenticated[MAX_WS_CLIENTS] = {false};   // Track authentication per-client
 bool pcPowerEnabled = false;               // Capability flag
 
 WebSocketsServer wsServer(81);
@@ -192,14 +193,14 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   }
 
   if (type == WStype_DISCONNECTED) {
-    if (num < 16) client_authenticated[num] = false;
+    if (num < MAX_WS_CLIENTS) client_authenticated[num] = false;
     return;
   }
 
   if (type == WStype_CONNECTED) {
     // Auto-authenticate if in AP mode (secured by WiFi password)
     if (isAPMode) {
-      if (num < 16) client_authenticated[num] = true;
+      if (num < MAX_WS_CLIENTS) client_authenticated[num] = true;
     }
     return;
   }
@@ -216,7 +217,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
   // Handle Authentication (Opcode 0xFF)
   if (cmd == 0xFF) {
     if (strcmp((const char*)&payload[1], secret_key) == 0) {
-      if (num < 16) client_authenticated[num] = true;
+      if (num < MAX_WS_CLIENTS) client_authenticated[num] = true;
       Serial.printf("Client %u Authenticated.\n", num);
     } else {
       wsServer.disconnect(num);
@@ -224,7 +225,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
     return;
   }
 
-  if (num >= 16 || !client_authenticated[num]) return;
+  if (num >= MAX_WS_CLIENTS || !client_authenticated[num]) return;
 
   switch (cmd) {
     // ---------------------------------------
@@ -567,7 +568,7 @@ void loop() {
 
     // Send Telemetry to Home Assistant (Opcode 0xF0 | float temp | int8 rssi)
     bool anyAuth = false;
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < MAX_WS_CLIENTS; i++) {
       if (client_authenticated[i]) { anyAuth = true; break; }
     }
     
@@ -580,7 +581,7 @@ void loop() {
       telePacket[7] = currentPowerState;
       telePacket[8] = pcPowerEnabled ? 0x01 : 0x00; // Capabilities Bitmask
       
-      for (int i = 0; i < 16; i++) {
+      for (int i = 0; i < MAX_WS_CLIENTS; i++) {
         if (client_authenticated[i]) {
           wsServer.sendBIN(i, telePacket, 9);
         }

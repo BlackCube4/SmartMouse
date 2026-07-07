@@ -226,7 +226,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
         packet = struct.pack("<BB", opcode, button_code)
         await ws_link.send(packet, binary=True)
 
-    # 0x51: MOUSE WHEEL SCROLL
+    # 0x41: MOUSE WHEEL SCROLL
     async def handle_scroll_wheel(call):
         """Send low-res scroll wheel movement."""
         ws_link = get_ws_link(call)
@@ -278,7 +278,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
         packet = struct.pack("<BB", opcode, keycode)
         await ws_link.send(packet, binary=True)
 
-    # 0x31, 0x32, 0x33: MEDIA/CONSUMER CONTROL
+    # 0x21, 0x22, 0x23: MEDIA/CONSUMER CONTROL
     async def handle_media_control(call):
         """Send media key press, release, or send."""
         ws_link = get_ws_link(call)
@@ -288,15 +288,15 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
         if mode == "press":
             opcode = OPCODE_MEDIA_PRESS
-            # Format: 0x31 | int16 code (3 bytes total, <h is little-endian 16-bit)
+            # Format: 0x21 | int16 code (3 bytes total, <h is little-endian 16-bit)
             packet = struct.pack("<Bh", opcode, code)
         elif mode == "release":
             opcode = OPCODE_MEDIA_RELEASE
-            # Format: 0x32 (1 byte total) - ESP code handles release without code payload
+            # Format: 0x22 (1 byte total) - ESP code handles release without code payload
             packet = struct.pack("<B", opcode)
         elif mode == "send":
             opcode = OPCODE_MEDIA_SEND
-            # Format: 0x33 | int16 code (3 bytes total)
+            # Format: 0x23 | int16 code (3 bytes total)
             packet = struct.pack("<Bh", opcode, code)
         else:
             _LOGGER.warning("Unknown media mode: %s", mode)
@@ -304,7 +304,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
         await ws_link.send(packet, binary=True)
 
-    # 0x41: TEXT SEND
+    # 0x31: TEXT SEND
     async def handle_text_send(call):
         """Send a string of text via the keyboard report."""
         ws_link = get_ws_link(call)
@@ -314,7 +314,7 @@ async def async_setup_entry(hass, entry: ConfigEntry):
             return
         
         # CRITICAL FIX: Add null terminator \x00 for ESP32's C-string expectations
-        # Format: 0x41 | raw utf8 text | \x00
+        # Format: 0x31 | raw utf8 text | \x00
         packet = struct.pack("<B", OPCODE_TEXT_SEND) + text.encode('utf-8') + b'\x00'
         await ws_link.send(packet, binary=True)
 

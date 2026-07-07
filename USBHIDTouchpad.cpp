@@ -470,9 +470,8 @@ void USBHIDTouchpad::_onSetFeature(uint8_t report_id, const uint8_t* buffer, uin
 uint16_t USBHIDTouchpad::_onGetFeature(uint8_t report_id, uint8_t* buffer, uint16_t len) {
   // UnifiedHID Logic:
   if (report_id == REPORTID_TOUCHPAD_MAX_COUNT && len >= 1) {
-    buffer[0] = 0x25; // Max contacts? UnifiedHID said 0x25 (Report ID?), wait.
-    // UnifiedHID: buffer[0] = 0x25. This looks like it's returning the Logical Maximum or the ID? 
-    // Let's stick to UnifiedHID exactly.
+    // Packed nibbles per descriptor (low: Contact Count Maximum=5, high: Pad Type=2)
+    buffer[0] = 0x25;
     return 1;
   }
   else if (report_id == REPORTID_TOUCHPAD_PTPHQA && len >= 256) {
