@@ -18,6 +18,12 @@
 // Default spacing between the two fingers in logical units
 #define FINGER_SPACING_DEFAULT 200
 
+// Report layout: [F1x5][F2x5][F3x5][F4x5][F5x5][ScanTimex2][ContactCountx1][Buttonsx1]
+#define TOUCHPAD_REPORT_LEN            29
+#define TOUCHPAD_FINGER_STRIDE         5
+#define TOUCHPAD_SCAN_TIME_OFFSET      25
+#define TOUCHPAD_CONTACT_COUNT_OFFSET  27
+
 // Windows Precision Touchpad Certification Blob (From UnifiedHID)
 static const uint8_t PTPHQA_BLOB[256] = {
   0xfc, 0x28, 0xfe, 0x84, 0x40, 0xcb, 0x9a, 0x87, 0x0d, 0xbe, 0x57, 0x3c, 0xb6, 0x70, 0x09, 0x88,

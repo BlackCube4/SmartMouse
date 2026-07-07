@@ -278,51 +278,45 @@ USBHIDTouchpad::USBHIDTouchpad() : hid(), _scan_time(0), _input_mode(3),
 void USBHIDTouchpad::begin() { hid.begin(); }
 void USBHIDTouchpad::end() {}
 
+// --- Report Encoding Helpers ---
+// Byte layout per finger slot: bit0=Tip Switch, bit1=Confidence, bits2-4=Contact Identifier
+static void encodeFinger(uint8_t* report, uint8_t slot, uint16_t x, uint16_t y, bool tip) {
+  uint8_t base = slot * TOUCHPAD_FINGER_STRIDE;
+  report[base] = (slot << 2) | 0x02 | (tip ? 0x01 : 0x00);
+  report[base + 1] = x & 0xFF;
+  report[base + 2] = (x >> 8) & 0xFF;
+  report[base + 3] = y & 0xFF;
+  report[base + 4] = (y >> 8) & 0xFF;
+}
+
+static void setScanTime(uint8_t* report, uint16_t scanTime) {
+  report[TOUCHPAD_SCAN_TIME_OFFSET] = scanTime & 0xFF;
+  report[TOUCHPAD_SCAN_TIME_OFFSET + 1] = (scanTime >> 8) & 0xFF;
+}
+
 // --- Internal Report Sender ---
 void USBHIDTouchpad::_sendReport(uint8_t count, uint16_t x_pos, uint16_t y_pos, uint16_t spacing) {
-  uint8_t report[29];
+  uint8_t report[TOUCHPAD_REPORT_LEN];
   memset(report, 0, sizeof(report)); // Clear report
 
-  // Report Layout: 
-  // [F1x5][F2x5][F3x5][F4x5][F5x5][ScanTimex2][ContactCountx1][Buttonsx1]
-
-  // Contact count (Byte 27)
-  report[27] = count;
+  report[TOUCHPAD_CONTACT_COUNT_OFFSET] = count;
 
   if (count > 0) {
-    // Finger 1 (Byte 0-4)
-    // Byte 0: Tip Switch (Bit 0), Confidence (Bit 1) -> 0x03
-    report[0] = 0x03; 
-    
     uint16_t half = spacing / 2;
     uint16_t x1 = (x_pos > half) ? x_pos - half : 0;
     if (x1 > LOGICAL_MAX_X) x1 = 0;
-    
-    report[1] = x1 & 0xFF;
-    report[2] = (x1 >> 8) & 0xFF;
-    report[3] = y_pos & 0xFF;
-    report[4] = (y_pos >> 8) & 0xFF;
 
-    // Finger 2 (Byte 5-9)
-    report[5] = 0x07; // Contact ID 1 + Tip + Confidence
-    
     uint16_t x2 = x_pos + half;
     if (x2 > LOGICAL_MAX_X) x2 = LOGICAL_MAX_X;
 
-    report[6] = x2 & 0xFF;
-    report[7] = (x2 >> 8) & 0xFF;
-    report[8] = y_pos & 0xFF;
-    report[9] = (y_pos >> 8) & 0xFF;
-  } 
-  
-  // Scan Time (Byte 25-26)
-  report[25] = _scan_time & 0xFF;
-  report[26] = (_scan_time >> 8) & 0xFF;
+    encodeFinger(report, 0, x1, y_pos, true);
+    encodeFinger(report, 1, x2, y_pos, true);
+  }
 
-  // Buttons (Byte 28) -> 0x00
+  setScanTime(report, _scan_time);
 
-  hid.SendReport(REPORTID_TOUCHPAD, report, 29);
-  
+  hid.SendReport(REPORTID_TOUCHPAD, report, TOUCHPAD_REPORT_LEN);
+
   _scan_time += 100; // 10ms units roughly
 }
 
@@ -373,79 +367,55 @@ void USBHIDTouchpad::zoom(int16_t delta) {
 }
 
 void USBHIDTouchpad::updateFingers(FingerData* fingers) {
-  uint8_t report[29];
+  uint8_t report[TOUCHPAD_REPORT_LEN];
   memset(report, 0, sizeof(report));
   uint8_t activeCount = 0;
 
-  for(int i = 0; i < 5; i++) {
-    uint8_t base = i * 5;
-    // Always include the Contact ID in its reserved slot
-    // Bit 0: Tip Switch (follows .active), Bit 1: Confidence (always 1 if we report it)
-    uint8_t tip = fingers[i].active ? 0x01 : 0x00;
-    report[base] = (i << 2) | 0x02 | tip; 
-    
-    report[base+1] = fingers[i].x & 0xFF;
-    report[base+2] = (fingers[i].x >> 8) & 0xFF;
-    report[base+3] = fingers[i].y & 0xFF;
-    report[base+4] = (fingers[i].y >> 8) & 0xFF;
-
-    if(fingers[i].active) activeCount++;
+  for (int i = 0; i < 5; i++) {
+    encodeFinger(report, i, fingers[i].x, fingers[i].y, fingers[i].active);
+    if (fingers[i].active) activeCount++;
   }
 
-  report[25] = _scan_time & 0xFF;
-  report[26] = (_scan_time >> 8) & 0xFF;
-  report[27] = activeCount;
+  setScanTime(report, _scan_time);
+  report[TOUCHPAD_CONTACT_COUNT_OFFSET] = activeCount;
 
-  hid.SendReport(REPORTID_TOUCHPAD, report, 29);
+  hid.SendReport(REPORTID_TOUCHPAD, report, TOUCHPAD_REPORT_LEN);
   _scan_time += 100;
   _fingers_down = (activeCount > 0);
 }
 
 void USBHIDTouchpad::liftFingers() {
   if (_fingers_down) {
-    uint8_t report_intermediate[29];
+    // 1. Intermediate Report: fingers still present but Tip Switch=0 (release event)
+    uint8_t report_intermediate[TOUCHPAD_REPORT_LEN];
     memset(report_intermediate, 0, sizeof(report_intermediate));
 
-    report_intermediate[27] = 2; 
+    report_intermediate[TOUCHPAD_CONTACT_COUNT_OFFSET] = 2;
 
-    // Finger 1 (Byte 0-4): Tip Switch=0, Confidence=1 -> 0x02
-    report_intermediate[0] = 0x02; 
     uint16_t half = _current_spacing / 2;
     uint16_t x1 = (_current_x > half) ? _current_x - half : 0;
-    report_intermediate[1] = x1 & 0xFF;
-    report_intermediate[2] = (x1 >> 8) & 0xFF;
-    report_intermediate[3] = _current_y & 0xFF;
-    report_intermediate[4] = (_current_y >> 8) & 0xFF;
-
-    // Finger 2 (Byte 5-9): ID 1 + Tip=0 + Confidence=1 -> 0x06
-    report_intermediate[5] = 0x06; 
     uint16_t x2 = _current_x + half;
     if (x2 > LOGICAL_MAX_X) x2 = LOGICAL_MAX_X;
-    report_intermediate[6] = x2 & 0xFF;
-    report_intermediate[7] = (x2 >> 8) & 0xFF;
-    report_intermediate[8] = _current_y & 0xFF;
-    report_intermediate[9] = (_current_y >> 8) & 0xFF;
-    
-    _scan_time += 10; // Small increment
-    report_intermediate[25] = _scan_time & 0xFF;
-    report_intermediate[26] = (_scan_time >> 8) & 0xFF;
-    
-    hid.SendReport(REPORTID_TOUCHPAD, report_intermediate, 29);
 
-    // === 2. Final Report: Zero Contacts ===
-    
-    uint8_t report_final[29] = {0};
-    
-    // Scan time update
+    encodeFinger(report_intermediate, 0, x1, _current_y, false);
+    encodeFinger(report_intermediate, 1, x2, _current_y, false);
+
     _scan_time += 10; // Small increment
-    report_final[25] = _scan_time & 0xFF;
-    report_final[26] = (_scan_time >> 8) & 0xFF;
-    report_final[27] = 0; // 0 Contacts
-    
-    hid.SendReport(REPORTID_TOUCHPAD, report_final, 29);
+    setScanTime(report_intermediate, _scan_time);
+
+    hid.SendReport(REPORTID_TOUCHPAD, report_intermediate, TOUCHPAD_REPORT_LEN);
+
+    // 2. Final Report: Zero Contacts
+    uint8_t report_final[TOUCHPAD_REPORT_LEN] = {0};
+
+    _scan_time += 10; // Small increment
+    setScanTime(report_final, _scan_time);
+    report_final[TOUCHPAD_CONTACT_COUNT_OFFSET] = 0; // 0 Contacts
+
+    hid.SendReport(REPORTID_TOUCHPAD, report_final, TOUCHPAD_REPORT_LEN);
 
     _fingers_down = false;
-    
+
     // Reset position to center
     _current_x = LOGICAL_MAX_X / 2;
     _current_y = LOGICAL_MAX_Y / 2;
