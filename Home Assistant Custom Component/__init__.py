@@ -402,6 +402,7 @@ class SmartMouseConnection:
         self.power_saving = None
         self.pc_status_raw = None
         self.pc_power_supported = False
+        self.using_ethernet = False
         self.entry = entry
         self._listeners = []
         self._run_task = None # To hold the asyncio task for run_forever
@@ -433,6 +434,7 @@ class SmartMouseConnection:
                             self.power_saving = bool(pwr_save)
                             self.pc_status_raw = pc_stat
                             self.pc_power_supported = bool(cap & 0x01)
+                            self.using_ethernet = bool(cap & 0x02)
                             self._notify_listeners()
                         
             except Exception as err:

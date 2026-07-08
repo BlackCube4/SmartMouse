@@ -38,7 +38,7 @@ little-endian.
 | `0xA0` | PC_CONTROL | client → device | `uint8 sub_cmd` (`0x01` toggle, `0x02` hard-off, `0x03` on, `0x04` off) | ✅ | ✅ | ✅ |
 | `0xFE` | SYSTEM_RESET | client → device | *(none)* | ✅ | ✅ | ✅ |
 | `0xFF` | AUTH | client → device | `utf8 secret, \0` | ✅ | n/a (handled by firmware only) | ✅ |
-| `0xF0` | TELEMETRY | device → client | `float temp, int8 rssi, uint8 sleeping, uint8 pc_state, uint8 caps` | ✅ | n/a | ✅ |
+| `0xF0` | TELEMETRY | device → client | `float temp, int8 rssi, uint8 sleeping, uint8 pc_state, uint8 caps` (`caps` bit 0 = PC power supported, bit 1 = connected via Ethernet) | ✅ | n/a | ✅ |
 
 Not protocol opcodes, but byte values that live in the same packets and are
 easy to confuse with opcodes:

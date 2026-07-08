@@ -9,7 +9,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     ws_link = hass.data[DOMAIN][entry.entry_id]
     entities = [
         SmartMouseTempSensor(ws_link, entry),
-        SmartMouseRSSISensor(ws_link, entry)
+        SmartMouseRSSISensor(ws_link, entry),
+        SmartMouseConnectionTypeSensor(ws_link, entry)
     ]
     
     pc_power_enabled = entry.data.get("PC Power Control", False)
@@ -70,6 +71,19 @@ class SmartMouseRSSISensor(SmartMouseBaseSensor):
     @property
     def native_value(self):
         return self._ws_link.rssi
+
+class SmartMouseConnectionTypeSensor(SmartMouseBaseSensor):
+    """Whether the device is currently reachable via WiFi or Ethernet."""
+    _attr_icon = "mdi:lan-connect"
+
+    def __init__(self, ws_link, entry):
+        super().__init__(ws_link, entry)
+        self._attr_name = f"{entry.title} Connection Type"
+        self._attr_unique_id = f"{entry.entry_id}_connection_type"
+
+    @property
+    def native_value(self):
+        return "Ethernet" if self._ws_link.using_ethernet else "WiFi"
 
 class SmartMousePCPowerStateSensor(SmartMouseBaseSensor):
     """Power state derived from duty cycle."""

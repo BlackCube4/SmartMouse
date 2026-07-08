@@ -12,6 +12,7 @@
 #include <ESPmDNS.h>
 #include <NetBIOS.h>
 #include <ArduinoOTA.h>
+#include <ETH.h>
 #include "index_html.h"
 #include "wifi_config_html.h"
 #include "test_sequence.h"
@@ -27,6 +28,16 @@ USBHIDTouchpad touchpad;
 // Pin 48 is the addressable WS2812 RGB LED.
 #define RGB_LED_PIN 48
 
+// Optional W5500 Ethernet module (SPI). Only used if a module actually
+// responds during the boot-time probe - safe to leave unwired on WiFi-only
+// devices. See PROTOCOL.md / README for wiring notes.
+#define PIN_ETH_CS   10
+#define PIN_ETH_SCK  12
+#define PIN_ETH_MISO 13
+#define PIN_ETH_MOSI 11
+#define PIN_ETH_RST  14
+#define PIN_ETH_INT  21
+
 // --- COMPILE-TIME DEFAULTS ---
 const bool  ENABLE_TEST_MODE = false; // Set to true to run the test sequence on startup
 const bool  DEFAULT_PC_POWER_ENABLED = false; // Default capability before first setup
@@ -34,7 +45,13 @@ const char* DEFAULT_SECRET   = "CHANGE_ME_SECRET";
 
 Preferences preferences;
 bool isAPMode = false;
+bool usingEthernet = false;
+volatile bool ethGotIP = false;
 DNSServer dnsServer;
+
+void onEthGotIP(arduino_event_id_t event) {
+  ethGotIP = true;
+}
 
 // Power Management
 unsigned long lastActivityTime = 0;
@@ -120,14 +137,14 @@ void wakeUp() {
   
   if (!isPowerSaving) return;
   setCpuFrequencyMhz(240);
-  if (!isAPMode) WiFi.setSleep(false);
+  if (!isAPMode && !usingEthernet) WiFi.setSleep(false);
   isPowerSaving = false;
   Serial.println("System: Waking up to High Performance mode.");
 }
 
 void enterPowerSaving() {
   if (isPowerSaving) return;
-  if (!isAPMode) WiFi.setSleep(true);   // Enable modem sleep to save radio power
+  if (!isAPMode && !usingEthernet) WiFi.setSleep(true);   // Enable modem sleep to save radio power
   setCpuFrequencyMhz(80); // Drop clock speed to reduce thermal output
   isPowerSaving = true;
   Serial.println("System: Entering Power Saving (Inactivity).");
@@ -433,40 +450,64 @@ void setup() {
   media.begin();
   touchpad.begin();
 
-  // WiFi Connection with AP Fallback
-  preferences.begin("wifi", false);
-  String storedSSID = preferences.getString("ssid", "");
-  String storedPass = preferences.getString("pass", "");
-  preferences.end();
+  // Ethernet Probe (W5500 over SPI). If no module is wired up, this fails
+  // fast and we fall through to WiFi below - safe to leave unwired.
+  WiFi.onEvent(onEthGotIP, ARDUINO_EVENT_ETH_GOT_IP);
+  // Signature matches arduino-esp32's official W5500 example; verify against
+  // your installed core's ETH.h if this fails to compile.
+  ETH.begin(ETH_PHY_W5500, 1, PIN_ETH_CS, PIN_ETH_INT, PIN_ETH_RST, SPI3_HOST, PIN_ETH_SCK, PIN_ETH_MISO, PIN_ETH_MOSI);
 
-  WiFi.mode(WIFI_STA); // Force Station mode to ensure DHCP hostname registers correctly
-  WiFi.setHostname("smartmouse"); 
-  WiFi.begin(storedSSID.c_str(), storedPass.c_str());
-  Serial.print("Connecting to WiFi");
-  
-  unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
-    delay(500);
+  Serial.print("Probing for Ethernet (W5500)");
+  unsigned long ethStartTime = millis();
+  while (!ethGotIP && millis() - ethStartTime < 5000) {
+    delay(200);
     Serial.print(".");
   }
+  usingEthernet = ethGotIP;
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWiFi Failed. Starting Access Point: SmartMouse-Setup");
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("SmartMouse-Setup", "SmartMouse123"); // Set your AP password here
-    isAPMode = true;
-    dnsServer.start(53, "*", WiFi.softAPIP()); // Redirect all DNS to local IP
-    Serial.print("AP IP Address: ");
-    Serial.println(WiFi.softAPIP());
-  } else {
-    Serial.println("\nWiFi Connected!");
+  if (usingEthernet) {
+    Serial.println("\nEthernet Connected!");
     Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Configuration Portal: http://");
-    Serial.print(WiFi.localIP()); Serial.println("/wifi");
-    WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
+    Serial.println(ETH.localIP());
+  } else {
+    // WiFi Connection with AP Fallback
+    preferences.begin("wifi", false);
+    String storedSSID = preferences.getString("ssid", "");
+    String storedPass = preferences.getString("pass", "");
+    preferences.end();
 
-    // Initialize Name Resolvers AFTER getting an IP address
+    WiFi.mode(WIFI_STA); // Force Station mode to ensure DHCP hostname registers correctly
+    WiFi.setHostname("smartmouse");
+    WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+    Serial.print("Connecting to WiFi");
+
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("\nWiFi Failed. Starting Access Point: SmartMouse-Setup");
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP("SmartMouse-Setup", "SmartMouse123"); // Set your AP password here
+      isAPMode = true;
+      dnsServer.start(53, "*", WiFi.softAPIP()); // Redirect all DNS to local IP
+      Serial.print("AP IP Address: ");
+      Serial.println(WiFi.softAPIP());
+    } else {
+      Serial.println("\nWiFi Connected!");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+      Serial.print("Configuration Portal: http://");
+      Serial.print(WiFi.localIP()); Serial.println("/wifi");
+      WiFi.setSleep(false); // CRITICAL: Prevents WiFi latency spikes
+    }
+  }
+
+  // Initialize Name Resolvers AFTER getting an IP address, over whichever
+  // interface (WiFi or Ethernet) came up - skipped in AP mode.
+  if (!isAPMode) {
     if (MDNS.begin("smartmouse")) {
       MDNS.setInstanceName("smartmouse");
       Serial.println("MDNS responder started: smartmouse.local");
@@ -555,7 +596,7 @@ void loop() {
       telePacket[5] = (uint8_t)rssi;
       telePacket[6] = isPowerSaving ? 1 : 0;
       telePacket[7] = currentPowerState;
-      telePacket[8] = pcPowerEnabled ? 0x01 : 0x00; // Capabilities Bitmask
+      telePacket[8] = (pcPowerEnabled ? 0x01 : 0x00) | (usingEthernet ? 0x02 : 0x00); // Capabilities Bitmask
       
       for (int i = 0; i < MAX_WS_CLIENTS; i++) {
         if (client_authenticated[i]) {
