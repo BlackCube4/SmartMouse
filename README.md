@@ -81,7 +81,7 @@ That's the whole setup for a WiFi-only device with basic mouse/keyboard/touchpad
 This lets Home Assistant turn your PC on/off/sleep by simulating presses of its physical power button, and read its power state back. It requires basic electronics knowledge — you're wiring into your motherboard's front-panel headers, so double-check polarity and voltages against your motherboard's manual before connecting anything.
 
 - **GPIO 8** (`PIN_POWER_SW`): through a small relay or transistor switch (don't wire a GPIO directly across the header), connect to your motherboard's front-panel **power switch** header (usually labeled `PWR_SW`, 2 pins). The board pulses this briefly to simulate a button press.
-- **GPIO 4** (`PIN_POWER_STAT`): through an optocoupler, connect to your motherboard's front-panel **power LED** header (`PWR_LED`). The board reads the LED's on/off/blink pattern to determine whether the PC is on, off, or asleep.
+- **GPIO 7** (`PIN_POWER_STAT`): through an optocoupler, connect to your motherboard's front-panel **power LED** header (`PWR_LED`). The board reads the LED's on/off/blink pattern to determine whether the PC is on, off, or asleep.
 
 If you don't need remote power control, skip this entirely and leave "Enable PC Power Control" unchecked in the setup page.
 
@@ -90,10 +90,10 @@ For a device sitting near a LAN port, wiring up a W5500 module gets you a wired 
 
 | W5500 pin | ESP32-S3 GPIO |
 | :--- | :--- |
-| INT  | 10 |
-| CS   | 11 |
-| SCK  | 12 |
-| MOSI | 13 |
+| INT  | 9 |
+| CS   | 10 |
+| SCK  | 11 |
+| MOSI | 12 |
 | MISO | 5 |
 | RST  | 6 |
 | VCC  | 3.3V |

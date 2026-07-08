@@ -24,7 +24,7 @@ USBHIDTouchpad touchpad;
 
 // PC Power GPIOs
 #define PIN_POWER_SW   8
-#define PIN_POWER_STAT 4
+#define PIN_POWER_STAT 7
 // Pin 48 is the addressable WS2812 RGB LED (fixed onboard trace on most
 // ESP32-S3 dev boards, not a free choice like the pins above).
 #define RGB_LED_PIN 48
@@ -32,10 +32,10 @@ USBHIDTouchpad touchpad;
 // Optional W5500 Ethernet module (SPI). Only used if a module actually
 // responds during the boot-time probe - safe to leave unwired on WiFi-only
 // devices. See PROTOCOL.md / README for wiring notes.
-#define PIN_ETH_INT  10
-#define PIN_ETH_CS   11
-#define PIN_ETH_SCK  12
-#define PIN_ETH_MOSI 13
+#define PIN_ETH_INT  9
+#define PIN_ETH_CS   10
+#define PIN_ETH_SCK  11
+#define PIN_ETH_MOSI 12
 #define PIN_ETH_MISO 5
 #define PIN_ETH_RST  6
 
