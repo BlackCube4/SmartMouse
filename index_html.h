@@ -171,6 +171,17 @@ const char* INDEX_HTML = R"rawliteral(
   // ==========================================
   // 1. ServiceManager Class
   // ==========================================
+  // Opcodes must match SmartMouse.ino and the Python integration's OPCODE_*
+  // constants. See PROTOCOL.md at the repo root for the full reference table.
+  const OP = {
+    MOUSE_RELATIVE: 0x01, MOUSE_ABSOLUTE: 0x02, MOUSE_PRESS: 0x03, MOUSE_RELEASE: 0x04, MOUSE_CLICK: 0x05,
+    KEY_PRESS: 0x11, KEY_RELEASE: 0x12, KEY_SEND: 0x13,
+    MEDIA_PRESS: 0x21, MEDIA_RELEASE: 0x22,
+    TEXT_SEND: 0x31,
+    SCROLL_WHEEL: 0x41, SCROLL_TOUCHPAD: 0x42, SCROLL_END: 0x4F,
+    PC_CONTROL: 0xA0, SYSTEM_RESET: 0xFE, AUTH: 0xFF, TELEMETRY: 0xF0
+  };
+
   class ServiceManager {
       constructor() {
           this.statusDot = document.getElementById('ws-status-dot');
@@ -196,7 +207,7 @@ const char* INDEX_HTML = R"rawliteral(
       sendPCPower(cmd) {
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new Uint8Array(2);
-              buffer[0] = 0xA0;
+              buffer[0] = OP.PC_CONTROL;
               buffer[1] = cmd;
               this.websocket.send(buffer);
           }
@@ -210,7 +221,7 @@ const char* INDEX_HTML = R"rawliteral(
           }
           // 2. Trigger Hardware Restart
           const buffer = new Uint8Array(1);
-          buffer[0] = 0xFE;
+          buffer[0] = OP.SYSTEM_RESET;
           this.websocket.send(buffer);
       }
   }
@@ -221,7 +232,7 @@ const char* INDEX_HTML = R"rawliteral(
           const encoder = new TextEncoder();
           const encoded = encoder.encode(token);
           const buffer = new Uint8Array(1 + encoded.length + 1);
-          buffer[0] = 0xFF;
+          buffer[0] = OP.AUTH;
           buffer.set(encoded, 1);
           buffer[buffer.length - 1] = 0;
           this.websocket.send(buffer);
@@ -234,7 +245,7 @@ const char* INDEX_HTML = R"rawliteral(
       onMessage(event) { 
           if (event.data instanceof ArrayBuffer) {
               const view = new DataView(event.data);
-              if (view.byteLength === 9 && view.getUint8(0) === 0xF0) {
+              if (view.byteLength === 9 && view.getUint8(0) === OP.TELEMETRY) {
                   const pcStat = view.getUint8(7);
                   document.dispatchEvent(new CustomEvent('telemetry', { detail: { pcStat } }));
               }
@@ -256,7 +267,7 @@ const char* INDEX_HTML = R"rawliteral(
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(5);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x01);
+              view.setUint8(0, OP.MOUSE_RELATIVE);
               view.setInt16(1, dx, true);
               view.setInt16(3, dy, true);
               this.websocket.send(buffer);
@@ -267,7 +278,7 @@ const char* INDEX_HTML = R"rawliteral(
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(5);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x02);
+              view.setUint8(0, OP.MOUSE_ABSOLUTE);
               view.setInt16(1, x, true);
               view.setInt16(3, y, true);
               this.websocket.send(buffer);
@@ -279,9 +290,9 @@ const char* INDEX_HTML = R"rawliteral(
           let value;
           const buttonMap = { "left": 1, "right": 2, "middle": 4 };
           value = buttonMap[button] || 1;
-          if (state === "down") opcode = 0x03; 
-          else if (state === "up") opcode = 0x04;
-          else if (state === "click" || state === "send") opcode = 0x05;
+          if (state === "down") opcode = OP.MOUSE_PRESS;
+          else if (state === "up") opcode = OP.MOUSE_RELEASE;
+          else if (state === "click" || state === "send") opcode = OP.MOUSE_CLICK;
           if (opcode) this.sendCmd(opcode, value);
       }
       
@@ -289,12 +300,12 @@ const char* INDEX_HTML = R"rawliteral(
           if (this.websocket && this.websocket.readyState === 1) {
               if (dx === 0 && dy === 0) {
                   const buffer = new Uint8Array(1);
-                  buffer[0] = 0x4F; // OPCODE_SCROLL_END (Lift Fingers)
+                  buffer[0] = OP.SCROLL_END; // Lift Fingers
                   this.websocket.send(buffer);
               } else {
                   const buffer = new ArrayBuffer(5);
                   const view = new DataView(buffer);
-                  view.setUint8(0, 0x42); // OPCODE_SCROLL_TOUCHPAD
+                  view.setUint8(0, OP.SCROLL_TOUCHPAD);
                   view.setInt16(1, dx, true);
                   view.setInt16(3, dy, true);
                   this.websocket.send(buffer);
@@ -306,7 +317,7 @@ const char* INDEX_HTML = R"rawliteral(
           if (this.websocket && this.websocket.readyState === 1) {
               const buffer = new ArrayBuffer(2);
               const view = new DataView(buffer);
-              view.setUint8(0, 0x41); // OPCODE_SCROLL_WHEEL
+              view.setUint8(0, OP.SCROLL_WHEEL);
               view.setInt8(1, amount);
               this.websocket.send(buffer);
           }
@@ -317,12 +328,12 @@ const char* INDEX_HTML = R"rawliteral(
               if (state === "press") {
                   const buffer = new ArrayBuffer(3);
                   const view = new DataView(buffer);
-                  view.setUint8(0, 0x21); // OPCODE_MEDIA_PRESS
+                  view.setUint8(0, OP.MEDIA_PRESS);
                   view.setInt16(1, code, true);
                   this.websocket.send(buffer);
               } else {
                   const buffer = new Uint8Array(1);
-                  buffer[0] = 0x22; // OPCODE_MEDIA_RELEASE
+                  buffer[0] = OP.MEDIA_RELEASE;
                   this.websocket.send(buffer);
               }
           }
@@ -331,9 +342,9 @@ const char* INDEX_HTML = R"rawliteral(
       sendKey(code, state) {
           if (this.websocket && this.websocket.readyState === 1) {
               let opcode;
-              if (state === "press") opcode = 0x11;
-              else if (state === "release") opcode = 0x12;
-              else if (state === "send") opcode = 0x13;
+              if (state === "press") opcode = OP.KEY_PRESS;
+              else if (state === "release") opcode = OP.KEY_RELEASE;
+              else if (state === "send") opcode = OP.KEY_SEND;
               if (opcode) this.sendCmd(opcode, code);
           }
       }
@@ -343,7 +354,7 @@ const char* INDEX_HTML = R"rawliteral(
               const encoder = new TextEncoder();
               const encodedText = encoder.encode(text);
               const buffer = new Uint8Array(2 + encodedText.length);
-              buffer[0] = 0x31; // OPCODE_TEXT_SEND
+              buffer[0] = OP.TEXT_SEND;
               buffer.set(encodedText, 1);
               buffer[buffer.length - 1] = 0; // Null terminator
               this.websocket.send(new Uint8Array(buffer).buffer);
