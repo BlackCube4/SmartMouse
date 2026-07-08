@@ -1,7 +1,7 @@
 import { GyroHandler } from './gyro-handler';
 import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
-import { html } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { html, css } from 'lit';
+import { customElement, query } from 'lit/decorators.js';
 
 @customElement('smartmouse-gyro-card-editor')
 export class SmartMouseGyroCardEditor extends SmartMouseCardEditorBase {
@@ -32,114 +32,115 @@ export class SmartMouseGyroCardEditor extends SmartMouseCardEditorBase {
 
 class SmartMouseGyroCard extends SmartMouseCardBase {
   private gyroHandler!: GyroHandler;
+  private pressTimer: number | null = null;
+  private isLongPress = false;
+
+  @query('.gyro-btn') private btnEl?: HTMLElement;
+  @query('.debug') private debugEl?: HTMLElement;
 
   static getConfigElement() { return document.createElement("smartmouse-gyro-card-editor"); }
   static getStubConfig() { return { type: "custom:smartmouse-gyro-card", gyroMode: "relative" }; }
 
-  protected reconnectKeys() {
-    return ['device_id', 'gyroMode', 'buttonText', 'buttonIcon', 'hideText'];
+  // Only recreate the handler when device_id/gyroMode actually change -
+  // cosmetic fields (buttonText/buttonIcon/hideText) just re-render.
+  protected onConfigUpdated(config: any, oldConfig: any) {
+    const needsNewHandler = !this.gyroHandler || !oldConfig ||
+      oldConfig.device_id !== config.device_id || oldConfig.gyroMode !== config.gyroMode;
+    if (needsNewHandler) {
+      this.gyroHandler = new GyroHandler(this.serviceManager, config);
+    }
   }
 
-  protected buildCard() {
-    this.gyroHandler = new GyroHandler(this.serviceManager, this._config);
+  protected updated() {
+    if (this.debugEl) {
+      this.gyroHandler.debugElem = this.debugEl;
+    }
+    // GyroHandler owns the button's innerHTML while calibrating - don't fight it.
+    if (this.btnEl && !this.gyroHandler.calibrating) {
+      this.syncButtonContent(this.btnEl, this._config.gyroMode === "absolute");
+    }
+  }
 
-    const root = document.createElement("div");
-    Object.assign(root.style, {
-      display: "flex",
-      flexDirection: "column",
-      gap: "8px",
-      padding: "0",
-      background: "transparent",
-      border: "none",
-    });
+  // The gyro button's inner markup (icon+text) is set imperatively rather than
+  // via Lit bindings, because GyroHandler also writes to it directly during
+  // calibration (innerHTML/style) - mixing the two would corrupt Lit's
+  // internal tracking of that node's children.
+  private syncButtonContent(btn: HTMLElement, isAbsolute: boolean) {
+    const text = this._config.hideText ? "" : (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative"));
+    const icon = this._config.buttonIcon || (isAbsolute ? "mdi:bullseye" : "mdi:ray-start-arrow");
+    const iconMargin = text ? "4px" : "0px";
+    btn.innerHTML = `<ha-icon icon="${icon}" style="margin-bottom: ${iconMargin}; pointer-events: none;"></ha-icon>${text}`;
+  }
 
-    const createBtn = (text: string, icon: string, handler: (() => void) | null = null) => {
-      const btn = document.createElement("button");
-      Object.assign(btn.style, {
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", background: "var(--dark, #2b2c2f)",
-        color: "var(--primary-text-color, #fff)", border: "none", cursor: "pointer", touchAction: "none"
-      });
-      const iconMargin = text ? "4px" : "0px";
-      btn.innerHTML = `<ha-icon icon="${icon}" style="margin-bottom: ${iconMargin}; pointer-events: none;"></ha-icon>${text}`;
-      if (handler) btn.addEventListener("click", handler);
-      return btn;
-    };
+  private cancelPress = () => {
+    if (this.pressTimer) { clearTimeout(this.pressTimer); this.pressTimer = null; }
+  };
 
-    const isAbsolute = (this._config as any).gyroMode === "absolute";
-    const btnText = this._config.hideText ? "" : (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative"));
-    const btnIcon = this._config.buttonIcon || (isAbsolute ? "mdi:bullseye" : "mdi:ray-start-arrow");
+  private handleAbsPointerDown = (e: Event) => {
+    e.preventDefault();
+    this.isLongPress = false;
+    this.pressTimer = window.setTimeout(() => {
+      this.isLongPress = true;
+      if (!this.gyroHandler.calibrating) {
+        this.gyroHandler.startCalibration(this.btnEl);
+        navigator.vibrate?.([50]);
+      }
+    }, 600); // 600ms long press to manually calibrate
+  };
 
-    if (isAbsolute) {
-      const absBtn = createBtn(btnText, btnIcon);
-      
-      let pressTimer: number | null = null;
-      let isLongPress = false;
-
-      const cancelPress = () => {
-        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      };
-
-      const startPress = (e: Event) => {
-        e.preventDefault();
-        isLongPress = false;
-        pressTimer = window.setTimeout(() => {
-          isLongPress = true;
-          if (!this.gyroHandler.calibrating) {
-            this.gyroHandler.startCalibration(absBtn);
-            navigator.vibrate?.([50]);
-          }
-        }, 600); // 600ms long press to manually calibrate
-      };
-
-      const endPress = (e: Event) => {
-        e.preventDefault();
-        cancelPress();
-        if (!isLongPress) {
-          if (this.gyroHandler.calibrating) {
-            return; // Let calibration finish
-          } else if (!this.gyroHandler.isCalibrated) {
-            this.gyroHandler.startCalibration(absBtn); // Start required calibration
-          } else {
-            this.gyroHandler.toggleGyroAbsolute().then(() => {
-              absBtn.style.background = this.gyroHandler.gyroAbsoluteActive ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
-            });
-          }
-        }
-      };
-
-      absBtn.addEventListener("pointerdown", startPress);
-      absBtn.addEventListener("pointerup", endPress);
-      absBtn.addEventListener("pointercancel", cancelPress);
-      absBtn.addEventListener("pointerleave", cancelPress);
-
-      root.append(absBtn);
+  private handleAbsPointerUp = (e: Event) => {
+    e.preventDefault();
+    this.cancelPress();
+    if (this.isLongPress) return;
+    if (this.gyroHandler.calibrating) {
+      return; // Let calibration finish
+    } else if (!this.gyroHandler.isCalibrated) {
+      this.gyroHandler.startCalibration(this.btnEl); // Start required calibration
     } else {
-      const relBtn = createBtn(btnText, btnIcon, () => {
-        this.gyroHandler.toggleGyroRelative().then(() => {
-          relBtn.style.background = this.gyroHandler.gyroRelativeActive ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
-        });
+      this.gyroHandler.toggleGyroAbsolute().then(() => {
+        if (this.btnEl) {
+          this.btnEl.style.background = this.gyroHandler.gyroAbsoluteActive ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
+        }
       });
-      root.append(relBtn);
     }
+  };
 
-    if (this._config.debug) {
-      const debugRow = document.createElement("div");
-      Object.assign(debugRow.style, {
-        padding: "8px",
-        background: "rgba(0,0,0,0.2)",
-        borderRadius: "4px",
-        fontFamily: "monospace",
-        fontSize: "11px",
-        whiteSpace: "pre-wrap"
-      });
-      debugRow.textContent = "Initializing Sensors...";
-      this.gyroHandler.debugElem = debugRow;
-      root.appendChild(debugRow);
-    }
+  private handleRelClick = () => {
+    this.gyroHandler.toggleGyroRelative().then(() => {
+      if (this.btnEl) {
+        this.btnEl.style.background = this.gyroHandler.gyroRelativeActive ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
+      }
+    });
+  };
 
-    this.shadowRoot?.appendChild(root);
+  protected render() {
+    const isAbsolute = this._config.gyroMode === "absolute";
+    return html`
+      ${isAbsolute
+        ? html`<button
+            class="gyro-btn"
+            @pointerdown=${this.handleAbsPointerDown}
+            @pointerup=${this.handleAbsPointerUp}
+            @pointercancel=${this.cancelPress}
+            @pointerleave=${this.cancelPress}
+          ></button>`
+        : html`<button class="gyro-btn" @click=${this.handleRelClick}></button>`}
+      ${this._config.debug ? html`<div class="debug">Initializing Sensors...</div>` : ''}
+    `;
   }
+
+  static styles = css`
+    :host { display: flex; flex-direction: column; gap: 8px; }
+    .gyro-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 12px; border-radius: var(--ha-card-border-radius, 8px); background: var(--dark, #2b2c2f);
+      color: var(--primary-text-color, #fff); border: none; cursor: pointer; touch-action: none;
+    }
+    .debug {
+      padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px;
+      font-family: monospace; font-size: 11px; white-space: pre-wrap;
+    }
+  `;
 
   getCardSize() { return 1; }
 }
