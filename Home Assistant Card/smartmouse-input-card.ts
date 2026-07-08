@@ -1,5 +1,5 @@
 import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
-import { html } from 'lit';
+import { html, css } from 'lit';
 import { customElement } from 'lit/decorators.js';
 
 @customElement('smartmouse-input-card-editor')
@@ -28,117 +28,111 @@ class SmartMouseInputCard extends SmartMouseCardBase {
     return { type: "custom:smartmouse-input-card", inputType: "buffered" };
   }
 
-  protected reconnectKeys() {
-    return ['device_id', 'inputType'];
-  }
+  private handleLiveWrapperKeydown = (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      this.serviceManager.sendKey(40, "send"); // Enter
+      const input = e.target as HTMLInputElement;
+      setTimeout(() => {
+        input.value = " ";
+        this.lastInputValue = " ";
+      }, 0);
+    }
+  };
 
-  protected buildCard() {
-    const root = document.createElement("div");
-    Object.assign(root.style, {
-      display: "flex",
-      gap: "8px",
-      padding: "0",
-      background: "transparent",
-      border: "none",
-    });
+  private handleLiveInput = (e: InputEvent) => {
+    const input = e.target as HTMLInputElement;
+    const val = input.value;
+    const diff = val.length - this.lastInputValue.length;
 
-    const isLive = (this._config as any).inputType === "live";
-
-    if (isLive) {
-      // --- LIVE INPUT WRAPPER ---
-      const liveWrapper = document.createElement("div");
-      Object.assign(liveWrapper.style, { position: "relative", width: "100%", margin: "0", padding: "0" });
-      
-      liveWrapper.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this.serviceManager.sendKey(40, "send"); // Enter
-          setTimeout(() => {
-            liveInput.value = " ";
-            this.lastInputValue = " ";
-          }, 0);
-        }
-      });
-
-      const liveInput = document.createElement("input");
-      liveInput.type = "password"; 
-      liveInput.setAttribute("data-1p-ignore", "true");
-      liveInput.setAttribute("data-bwignore", "true");
-      liveInput.setAttribute("data-lpignore", "true");
-      liveInput.setAttribute("data-form-type", "other");
-      liveInput.autocomplete = "off";
-      liveInput.setAttribute("autocorrect", "off");
-      liveInput.setAttribute("autocapitalize", "none");
-      liveInput.spellcheck = false;
-      liveInput.value = " ";
-      Object.assign(liveInput.style, {
-        width: "100%", padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", boxSizing: "border-box",
-        background: "var(--dark, #2a2b2e)", border: "0px",
-        color: "transparent", fontSize: "14px", textAlign: "center"
-      });
-
-      const kbIcon = document.createElement("ha-icon");
-      kbIcon.setAttribute("icon", "mdi:keyboard");
-      Object.assign(kbIcon.style, {
-        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", pointerEvents: "none"
-      });
-
-      liveWrapper.append(liveInput, kbIcon);
-
-      // Live Input Logic
-      liveInput.addEventListener("input", () => {
-        const val = liveInput.value;
-        const diff = val.length - this.lastInputValue.length;
-        
-        if (val.length < 1) {
-           this.serviceManager.sendKey(42, "send"); // Backspace
-           setTimeout(() => { liveInput.value = " "; this.lastInputValue = " "; }, 0);
-           return;
-        }
-
-        if (diff > 0) {
-            const added = val.slice(this.lastInputValue.length);
-            if (added) this.serviceManager.sendText(added);
-        } else if (diff < 0) {
-            for(let i=0; i<Math.abs(diff); i++) this.serviceManager.sendKey(42, "send");
-        }
-
-        this.lastInputValue = val;
-        setTimeout(() => { liveInput.value = " "; this.lastInputValue = " "; }, 0);
-      });
-
-      liveInput.addEventListener("blur", () => { liveInput.value = " "; this.lastInputValue = " "; });
-      
-      root.append(liveWrapper);
-    } else {
-      // --- STANDARD TEXT INPUT ---
-      const textInput = document.createElement("input");
-      textInput.type = "text";
-      textInput.placeholder = "Type to send...";
-      Object.assign(textInput.style, {
-        flex: "1", padding: "12px", borderRadius: "var(--ha-card-border-radius, 8px)", boxSizing: "border-box",
-        background: "var(--dark, #2a2b2e)", border: "0px",
-        color: "var(--primary-text-color, #fff)", fontSize: "14px", outline: "none"
-      });
-
-      textInput.addEventListener("keydown", (e) => {
-        e.stopPropagation();
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if (textInput.value) {
-            this.serviceManager.sendText(textInput.value);
-            textInput.value = "";
-          } else {
-            this.serviceManager.sendKey(40, "send"); // Enter key
-          }
-        }
-      });
-
-      root.append(textInput);
+    if (val.length < 1) {
+      this.serviceManager.sendKey(42, "send"); // Backspace
+      setTimeout(() => { input.value = " "; this.lastInputValue = " "; }, 0);
+      return;
     }
 
-    this.shadowRoot?.appendChild(root);
+    if (diff > 0) {
+      const added = val.slice(this.lastInputValue.length);
+      if (added) this.serviceManager.sendText(added);
+    } else if (diff < 0) {
+      for (let i = 0; i < Math.abs(diff); i++) this.serviceManager.sendKey(42, "send");
+    }
+
+    this.lastInputValue = val;
+    setTimeout(() => { input.value = " "; this.lastInputValue = " "; }, 0);
+  };
+
+  private handleLiveBlur = (e: FocusEvent) => {
+    const input = e.target as HTMLInputElement;
+    input.value = " ";
+    this.lastInputValue = " ";
+  };
+
+  private handleBufferedKeydown = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const input = e.target as HTMLInputElement;
+      if (input.value) {
+        this.serviceManager.sendText(input.value);
+        input.value = "";
+      } else {
+        this.serviceManager.sendKey(40, "send"); // Enter key
+      }
+    }
+  };
+
+  protected render() {
+    if (this._config.inputType === "live") {
+      return html`
+        <div class="wrapper" @keydown=${this.handleLiveWrapperKeydown}>
+          <input
+            class="live-input"
+            type="password"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-lpignore="true"
+            data-form-type="other"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            .spellcheck=${false}
+            .value=${" "}
+            @input=${this.handleLiveInput}
+            @blur=${this.handleLiveBlur}
+          >
+          <ha-icon icon="mdi:keyboard"></ha-icon>
+        </div>
+      `;
+    }
+
+    return html`
+      <input
+        class="buffered-input"
+        type="text"
+        placeholder="Type to send..."
+        @keydown=${this.handleBufferedKeydown}
+      >
+    `;
   }
+
+  static styles = css`
+    :host { display: flex; gap: 8px; }
+    .wrapper { position: relative; width: 100%; margin: 0; padding: 0; }
+    .live-input {
+      width: 100%; padding: 12px; border-radius: var(--ha-card-border-radius, 8px); box-sizing: border-box;
+      background: var(--dark, #2a2b2e); border: 0px;
+      color: transparent; font-size: 14px; text-align: center;
+    }
+    ha-icon {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+    }
+    .buffered-input {
+      flex: 1; padding: 12px; border-radius: var(--ha-card-border-radius, 8px); box-sizing: border-box;
+      background: var(--dark, #2a2b2e); border: 0px;
+      color: var(--primary-text-color, #fff); font-size: 14px; outline: none;
+    }
+  `;
 }
 
 customElements.define("smartmouse-input-card", SmartMouseInputCard);
