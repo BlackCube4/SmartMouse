@@ -1,11 +1,26 @@
 import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
-import { customElement } from 'lit/decorators.js';
+import { html, css } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
 
 @customElement('smartmouse-modifier-card-editor')
 export class SmartMouseModifierCardEditor extends SmartMouseCardEditorBase {}
 
+interface ModifierKey {
+  label: string;
+  code: number;
+  toggle: boolean;
+}
+
+const MODIFIER_KEYS: ModifierKey[] = [
+  { label: "Ctrl", code: 224, toggle: true },
+  { label: "Shift", code: 225, toggle: true },
+  { label: "Alt", code: 226, toggle: true },
+  { label: "Win", code: 227, toggle: true },
+  { label: "ESC", code: 41, toggle: false },
+];
+
 class SmartMouseModifierCard extends SmartMouseCardBase {
-  private modifierState: Record<string, boolean> = { ctrl: false, alt: false, shift: false, win: false };
+  @state() private modifierState: Record<string, boolean> = { ctrl: false, shift: false, alt: false, win: false };
 
   static getConfigElement() { return document.createElement("smartmouse-modifier-card-editor"); }
 
@@ -13,54 +28,41 @@ class SmartMouseModifierCard extends SmartMouseCardBase {
     return { type: "custom:smartmouse-modifier-card" };
   }
 
-  protected buildCard() {
-    const root = document.createElement("div");
-    Object.assign(root.style, {
-      display: "grid",
-      gridTemplateColumns: "repeat(5, 1fr)",
-      gap: "8px",
-      padding: "0",
-      background: "transparent",
-      border: "none",
-    });
-
-    const createBtn = (label: string, code: number, isToggle: boolean) => {
-      const btn = document.createElement("button");
-      Object.assign(btn.style, {
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "12px 4px", borderRadius: "var(--ha-card-border-radius, 8px)", background: "var(--dark, #2b2c2f)",
-        color: "var(--primary-text-color, #fff)", border: "none", cursor: "pointer", 
-        fontSize: "14px", fontWeight: "600", touchAction: "none"
-      });
-      btn.textContent = label;
-
-      if (isToggle) {
-        const key = label.toLowerCase();
-        btn.addEventListener("click", () => {
-          this.modifierState[key] = !this.modifierState[key];
-          btn.style.background = this.modifierState[key] ? "var(--primary-color, #666)" : "var(--dark, #2b2c2f)";
-          this.serviceManager.sendKey(code, this.modifierState[key] ? "press" : "release");
-          navigator.vibrate?.([30]);
-        });
-      } else {
-        btn.addEventListener("click", () => {
-          this.serviceManager.sendKey(code, "send");
-          navigator.vibrate?.([30]);
-        });
-      }
-      return btn;
-    };
-
-    root.append(
-      createBtn("Ctrl", 224, true),
-      createBtn("Shift", 225, true),
-      createBtn("Alt", 226, true),
-      createBtn("Win", 227, true),
-      createBtn("ESC", 41, false)
-    );
-
-    this.shadowRoot?.appendChild(root);
+  private handleClick(key: ModifierKey) {
+    if (key.toggle) {
+      const stateKey = key.label.toLowerCase();
+      const active = !this.modifierState[stateKey];
+      this.modifierState = { ...this.modifierState, [stateKey]: active };
+      this.serviceManager.sendKey(key.code, active ? "press" : "release");
+    } else {
+      this.serviceManager.sendKey(key.code, "send");
+    }
+    navigator.vibrate?.([30]);
   }
+
+  protected render() {
+    return html`
+      <div class="grid">
+        ${MODIFIER_KEYS.map(key => html`
+          <button
+            class=${key.toggle && this.modifierState[key.label.toLowerCase()] ? 'active' : ''}
+            @click=${() => this.handleClick(key)}
+          >${key.label}</button>
+        `)}
+      </div>
+    `;
+  }
+
+  static styles = css`
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    button {
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px 4px; border-radius: var(--ha-card-border-radius, 8px);
+      background: var(--dark, #2b2c2f); color: var(--primary-text-color, #fff);
+      border: none; cursor: pointer; font-size: 14px; font-weight: 600; touch-action: none;
+    }
+    button.active { background: var(--primary-color, #666); }
+  `;
 }
 
 customElements.define("smartmouse-modifier-card", SmartMouseModifierCard);

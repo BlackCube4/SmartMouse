@@ -1,6 +1,6 @@
 import { ServiceManager } from './service-manager';
 import { HomeAssistant } from './types';
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, PropertyValues } from 'lit';
 import { property, state } from 'lit/decorators.js';
 
 // Shared editor base: renders the "Target Device" selector every card needs,
@@ -57,54 +57,37 @@ export abstract class SmartMouseCardEditorBase extends LitElement {
   `;
 }
 
-// Shared card base: handles the shadow root, hass wiring, and the
-// "reset shadow DOM and rebuild" dance when a config key that affects
-// layout changes. Subclasses implement buildCard() instead of connectedCallback().
-export abstract class SmartMouseCardBase extends HTMLElement {
-  protected _hass?: HomeAssistant;
-  protected _config: any = {};
+// Shared card base: handles hass wiring and ServiceManager lifecycle.
+// Lit's own reactive diffing replaces the old "wipe shadow DOM and rebuild"
+// hack - subclasses just implement render() as usual and decide for
+// themselves (in willUpdate/onConfigUpdated) whether a config change is
+// significant enough to recreate a handler (e.g. GyroHandler, TouchpadHandler).
+export abstract class SmartMouseCardBase extends LitElement {
+  @state() protected _config: any = {};
   protected serviceManager!: ServiceManager;
-  protected rendered = false;
-
-  constructor() {
-    super();
-    this.attachShadow({ mode: "open" });
-  }
-
-  // Config keys that require a full rebuild of the card when they change.
-  // Defaults to device_id; override to add more.
-  protected reconnectKeys(): string[] {
-    return ['device_id'];
-  }
-
-  // Called on every setConfig, even when no rebuild happens.
-  // Override to push live config updates into handlers without a rebuild.
-  protected onConfigUpdated(_config: any) {}
-
-  setConfig(config: any) {
-    const oldConfig = this._config;
-    this._config = config;
-    this.onConfigUpdated(config);
-
-    const needsRebuild = this.reconnectKeys().some(key => oldConfig?.[key] !== config[key]);
-    if (this.rendered && needsRebuild) {
-      if (this.shadowRoot) this.shadowRoot.innerHTML = '';
-      this.rendered = false;
-      this.connectedCallback();
-    }
-  }
+  private _hass?: HomeAssistant;
 
   set hass(hass: HomeAssistant) {
     this._hass = hass;
     if (this.serviceManager) this.serviceManager.hass = hass;
   }
 
-  connectedCallback() {
-    if (this.rendered) return;
-    this.rendered = true;
-    this.serviceManager = new ServiceManager(this._hass, this._config);
-    this.buildCard();
+  setConfig(config: any) {
+    this._config = config;
   }
 
-  protected abstract buildCard(): void;
+  willUpdate(changedProps: PropertyValues) {
+    if (changedProps.has('_config')) {
+      if (!this.serviceManager) {
+        this.serviceManager = new ServiceManager(this._hass, this._config);
+      } else {
+        this.serviceManager.config = this._config;
+      }
+      this.onConfigUpdated(this._config, changedProps.get('_config'));
+    }
+  }
+
+  // Called whenever _config changes, after serviceManager is up to date.
+  // Override to recreate handlers or push live updates as needed.
+  protected onConfigUpdated(_config: any, _oldConfig: any) {}
 }
