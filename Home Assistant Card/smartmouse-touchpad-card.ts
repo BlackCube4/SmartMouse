@@ -1,7 +1,7 @@
 import { TouchpadHandler } from './touchpad-handler';
 import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
-import { html } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { html, css } from 'lit';
+import { customElement, query } from 'lit/decorators.js';
 
 @customElement('smartmouse-touchpad-card-editor')
 export class SmartMouseTouchpadCardEditor extends SmartMouseCardEditorBase {
@@ -33,74 +33,69 @@ export class SmartMouseTouchpadCardEditor extends SmartMouseCardEditorBase {
 class SmartMouseTouchpadCard extends SmartMouseCardBase {
   private touchpadHandler!: TouchpadHandler;
 
+  @query('.pad') private padEl!: HTMLElement;
+  @query('.scroll-area') private scrollAreaEl!: HTMLElement;
+
   static getConfigElement() { return document.createElement("smartmouse-touchpad-card-editor"); }
   static getStubConfig() { return { type: "custom:smartmouse-touchpad-card" }; }
 
   protected onConfigUpdated(config: any) {
-    if (this.serviceManager) {
-      this.serviceManager.config = config;
-    }
     if (this.touchpadHandler) {
       this.touchpadHandler.updateConfig(config);
     }
   }
 
-  protected buildCard() {
+  protected firstUpdated() {
     this.touchpadHandler = new TouchpadHandler(this.serviceManager, this._config);
-
-    const root = document.createElement("div");
-    Object.assign(root.style, {
-      display: "flex",
-      height: "220px",
-      width: "100%",
-      borderRadius: "var(--ha-card-border-radius, 10px)",
-      overflow: "hidden",
-      border: "var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f)",
-      background: "var(--ha-card-background, #1e1f22)",
-      boxShadow: "var(--ha-card-box-shadow)",
-      color: "var(--primary-text-color, #fff)",
-      userSelect: "none"
-    });
-
-    const pad = document.createElement("div");
-    Object.assign(pad.style, {
-      flex: "1",
-      background: "var(--dark, #2a2b2e)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "15px",
-      touchAction: "none", 
-    });
-    pad.textContent = "Touchpad";
-
-    const divider = document.createElement("div");
-    Object.assign(divider.style, {
-      width: "1px",
-      background: "var(--divider-color, #3a3b3d)",
-    });
-
-    const scrollArea = document.createElement("div");
-    Object.assign(scrollArea.style, {
-      width: "56px",
-      background: "var(--dark, #2a2b2e)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px",
-      userSelect: "none",
-      touchAction: "none",
-    });
-    scrollArea.textContent = "☰";
-
-    root.appendChild(pad);
-    root.appendChild(divider);
-    root.appendChild(scrollArea);
-    this.shadowRoot?.appendChild(root);
-
-    this.touchpadHandler.setupPad(pad);
-    this.touchpadHandler.setupScrollArea(scrollArea);
+    this.touchpadHandler.setupPad(this.padEl);
+    this.touchpadHandler.setupScrollArea(this.scrollAreaEl);
   }
+
+  protected render() {
+    return html`
+      <div class="pad">Touchpad</div>
+      <div class="divider"></div>
+      <div class="scroll-area">☰</div>
+    `;
+  }
+
+  static styles = css`
+    :host {
+      display: flex;
+      height: 220px;
+      width: 100%;
+      border-radius: var(--ha-card-border-radius, 10px);
+      overflow: hidden;
+      border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, #2b2c2f);
+      background: var(--ha-card-background, #1e1f22);
+      box-shadow: var(--ha-card-box-shadow);
+      color: var(--primary-text-color, #fff);
+      user-select: none;
+    }
+    .pad {
+      flex: 1;
+      background: var(--dark, #2a2b2e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      touch-action: none;
+    }
+    .divider {
+      width: 1px;
+      background: var(--divider-color, #3a3b3d);
+    }
+    .scroll-area {
+      width: 56px;
+      background: var(--dark, #2a2b2e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      user-select: none;
+      touch-action: none;
+    }
+  `;
 
   getCardSize() { return 4; }
 }
