@@ -457,6 +457,7 @@ void setup() {
   // Signature matches arduino-esp32's official W5500 example; verify against
   // your installed core's ETH.h if this fails to compile.
   ETH.begin(ETH_PHY_W5500, 1, PIN_ETH_CS, PIN_ETH_INT, PIN_ETH_RST, SPI3_HOST, PIN_ETH_SCK, PIN_ETH_MISO, PIN_ETH_MOSI);
+  ETH.setHostname("smartmouse");
 
   Serial.print("Probing for Ethernet (W5500)");
   unsigned long ethStartTime = millis();
