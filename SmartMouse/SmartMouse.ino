@@ -509,7 +509,11 @@ void setup() {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println("\nWiFi Failed. Starting Access Point: SmartMouse-Setup");
       WiFi.mode(WIFI_AP);
-      WiFi.softAP("SmartMouse-Setup", "SmartMouse123"); // Set your AP password here
+      // Use the shared secret as the AP password too, so there's only one
+      // value to customize. WPA2 requires 8-63 chars; fall back to a default
+      // if a custom secret_key is shorter than that.
+      const char* apPassword = (strlen(secret_key) >= 8) ? secret_key : "SmartMouse123";
+      WiFi.softAP("SmartMouse-Setup", apPassword);
       isAPMode = true;
       dnsServer.start(53, "*", WiFi.softAPIP()); // Redirect all DNS to local IP
       Serial.print("AP IP Address: ");

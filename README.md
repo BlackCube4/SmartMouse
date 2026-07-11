@@ -45,14 +45,14 @@ Click the green **Code** button on the GitHub page → **Download ZIP** → extr
    - **USB Mode: "USB-OTG (TinyUSB)"** — required, this is what lets the board act as a real keyboard/mouse.
    - **USB CDC On Boot: "Enabled"** — optional, but lets you see debug output over USB in the Serial Monitor.
 4. **Tools → Port** → select the port that appears when the board is plugged in.
-5. *(Optional but recommended)* Open `SmartMouse/SmartMouse.ino` and change `DEFAULT_SECRET` (near the top) to your own random string — this is the password that authenticates WebSocket clients and OTA updates, so don't ship it with the default value.
+5. *(Optional but recommended)* Open `SmartMouse/SmartMouse.ino` and change `DEFAULT_SECRET` (near the top) to your own random string of at least 8 characters — this authenticates WebSocket clients and OTA updates, *and* doubles as the password for the setup hotspot in step 7 below, so don't ship it with the default value.
 
 ### 6. Upload the firmware
 Click the **Upload** button (→ arrow icon). If it fails to find the port or upload: hold the **BOOT** button on the board, tap **RESET** (or plug in the USB cable while holding BOOT), release BOOT, then try Upload again — this forces the board into flashing mode. This is a common one-time hiccup on the very first upload.
 
 ### 7. First boot: connect it to your WiFi
 The board has no network configured yet, so it starts its own WiFi hotspot:
-1. On your phone or laptop, connect to the WiFi network **`SmartMouse-Setup`** (password `SmartMouse123`).
+1. On your phone or laptop, connect to the WiFi network **`SmartMouse-Setup`** (password: whatever you set `DEFAULT_SECRET` to in step 5 — or `SmartMouse123` if you left it at the default, or if your custom secret was under 8 characters).
 2. A setup page should open automatically (captive portal); if not, open a browser and go to `http://192.168.4.1/wifi`.
 3. Pick your home WiFi network, enter its password, optionally set a "Device Name" (useful once you have more than one SmartMouse — this becomes its hostname, e.g. `<name>.local`), and (if you wired it up) check "Enable PC Power Control".
 4. Click **Save** — the board restarts and joins your home WiFi.
