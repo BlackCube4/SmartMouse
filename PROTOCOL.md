@@ -9,7 +9,7 @@ update all three, then update this table**:
    `handlePCPowerCmd`, plus the `0xFF` auth and `0xF0` telemetry handling in
    `onWebSocketEvent`.
 2. Python integration (sender, via Home Assistant services):
-   `custom_components/smartmouse/__init__.py` — the `OPCODE_*` constants
+   `Home Assistant custom component/smartmouse/__init__.py` — the `OPCODE_*` constants
    near the top of the file.
 3. Standalone control page (sender, independent WebSocket client):
    `index_html.h` — the `OP` object inside `class ServiceManager`.

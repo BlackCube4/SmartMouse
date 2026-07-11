@@ -36,16 +36,16 @@ Download and install the [Arduino IDE](https://www.arduino.cc/en/software) (vers
 Everything else this project needs (WiFi, WebServer, Preferences, mDNS, NetBIOS, ArduinoOTA, Ethernet, USB HID) is already built into the ESP32 board package from step 2 — no other libraries to install.
 
 ### 4. Download this project
-Click the green **Code** button on the GitHub page → **Download ZIP** → extract it. The firmware lives in the `SmartMouse` subfolder — Arduino IDE requires the folder name to match the main file name, and `SmartMouse/SmartMouse.ino` already satisfies that, so no renaming needed.
+Click the green **Code** button on the GitHub page → **Download ZIP** → extract it. The firmware lives in `Arduino IDE/SmartMouse` — Arduino IDE requires the sketch folder name to match the main file name, and `SmartMouse/SmartMouse.ino` already satisfies that, so no renaming needed.
 
 ### 5. Open the sketch and configure the board
-1. In Arduino IDE: **File → Open** → select `SmartMouse/SmartMouse.ino`.
+1. In Arduino IDE: **File → Open** → select `Arduino IDE/SmartMouse/SmartMouse.ino`.
 2. **Tools → Board → esp32 →** select your exact board (e.g. "ESP32S3 Dev Module").
 3. Still under **Tools**, set:
    - **USB Mode: "USB-OTG (TinyUSB)"** — required, this is what lets the board act as a real keyboard/mouse.
    - **USB CDC On Boot: "Enabled"** — optional, but lets you see debug output over USB in the Serial Monitor.
 4. **Tools → Port** → select the port that appears when the board is plugged in.
-5. *(Optional but recommended)* Open `SmartMouse/SmartMouse.ino` and change `DEFAULT_SECRET` (near the top) to your own random string of at least 8 characters — this authenticates WebSocket clients and OTA updates, *and* doubles as the password for the setup hotspot in step 7 below, so don't ship it with the default value.
+5. *(Optional but recommended)* Open `Arduino IDE/SmartMouse/SmartMouse.ino` and change `DEFAULT_SECRET` (near the top) to your own random string of at least 8 characters — this authenticates WebSocket clients and OTA updates, *and* doubles as the password for the setup hotspot in step 7 below, so don't ship it with the default value.
 
 ### 6. Upload the firmware
 Click the **Upload** button (→ arrow icon). If it fails to find the port or upload: hold the **BOOT** button on the board, tap **RESET** (or plug in the USB cable while holding BOOT), release BOOT, then try Upload again — this forces the board into flashing mode. This is a common one-time hiccup on the very first upload.
@@ -61,7 +61,7 @@ The board has no network configured yet, so it starts its own WiFi hotspot:
 Look it up in your router's connected-devices list, or try `http://smartmouse.local` in a browser. Note its IP address — you'll need it for the Home Assistant integration.
 
 ### 9. Install the Home Assistant integration
-1. Copy the `custom_components/smartmouse` folder from this repo into your Home Assistant config's `custom_components` directory (create that directory first if it doesn't exist yet) — no renaming needed, it's already named correctly.
+1. Copy the `Home Assistant custom component/smartmouse` folder from this repo into your Home Assistant config's `custom_components` directory (create that directory first if it doesn't exist yet) — no renaming needed, it's already named correctly.
 2. Restart Home Assistant.
 3. **Settings → Devices & Services → Add Integration** → search for "SmartMouse" → enter the device's IP address, port `81`, and the secret key you set in step 5.
 
@@ -108,7 +108,7 @@ Leave it unwired on devices that should stay on WiFi — the boot-time probe fai
 ## Home Assistant Configuration
 
 ### Installation
-See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy this repo's `custom_components/smartmouse` folder into your Home Assistant config's `custom_components` directory, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
+See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy this repo's `Home Assistant custom component/smartmouse` folder into your Home Assistant config's `custom_components` directory, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
 
 ### Gyro / UI Configuration
 When using the custom card, you can tune the following parameters in the card's YAML:
