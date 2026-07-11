@@ -28,8 +28,12 @@ Download and install the [Arduino IDE](https://www.arduino.cc/en/software) (vers
 1. Open Arduino IDE → **File → Preferences** → paste this URL into "Additional Board Manager URLs": `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
 2. **Tools → Board → Boards Manager**, search for `esp32`, install the package by **Espressif Systems**.
 
-### 3. Install the one required library
-**Tools → Manage Libraries**, search for `WebSockets` (by Markus Sattler) and install it. Everything else this project needs (WiFi, WebServer, Preferences, mDNS, NetBIOS, ArduinoOTA, Ethernet, USB HID) is already built into the ESP32 board package from step 2 — no other libraries to install.
+### 3. Install the required libraries
+**Tools → Manage Libraries**, search for and install both of these:
+- `WebSockets` (by Markus Sattler)
+- `Adafruit NeoPixel` (by Adafruit)
+
+Everything else this project needs (WiFi, WebServer, Preferences, mDNS, NetBIOS, ArduinoOTA, Ethernet, USB HID) is already built into the ESP32 board package from step 2 — no other libraries to install.
 
 ### 4. Download this project
 Click the green **Code** button on the GitHub page → **Download ZIP** → extract it. The firmware lives in the `SmartMouse` subfolder — Arduino IDE requires the folder name to match the main file name, and `SmartMouse/SmartMouse.ino` already satisfies that, so no renaming needed.
