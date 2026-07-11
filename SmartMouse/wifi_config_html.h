@@ -21,6 +21,7 @@ const char* WIFI_CONFIG_HTML = R"rawliteral(
     <select id="s" onchange="document.getElementById('ssid').value=this.value"><option>Scanning...</option></select>
     <label>SSID:</label><input id="ssid" name="ssid" type="text" required placeholder="Network Name">
     <label>Password:</label><input name="pass" type="password" placeholder="Password">
+    <label>Device Name:</label><input name="hostname" type="text" maxlength="15" placeholder="smartmouse" value="%HOSTNAME%">
     <div style="display:flex; align-items:center; gap:10px; margin:10px 0;">
       <input type="checkbox" name="pcpwr" id="pcpwr" style="width:auto; margin:0;" %PCPWR_CHECKED%> <label for="pcpwr">Enable PC Power Control</label>
     </div>

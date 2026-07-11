@@ -43,15 +43,28 @@ USBHIDTouchpad touchpad;
 const bool  ENABLE_TEST_MODE = false; // Set to true to run the test sequence on startup
 const bool  DEFAULT_PC_POWER_ENABLED = false; // Default capability before first setup
 const char* DEFAULT_SECRET   = "CHANGE_ME_SECRET";
+const char* DEFAULT_HOSTNAME = "smartmouse";
 
 Preferences preferences;
 bool isAPMode = false;
 bool usingEthernet = false;
 volatile bool ethGotIP = false;
 DNSServer dnsServer;
+String deviceHostname = DEFAULT_HOSTNAME;
 
 void onEthGotIP(arduino_event_id_t event) {
   ethGotIP = true;
+}
+
+// Keep only characters that are safe across DHCP/mDNS/NetBIOS, and stay
+// within NetBIOS's 15-character limit (the strictest of the three).
+String sanitizeHostname(String name) {
+  String result = "";
+  for (size_t i = 0; i < name.length() && result.length() < 15; i++) {
+    char c = name.charAt(i);
+    if (isalnum(c) || c == '-') result += c;
+  }
+  return result.length() > 0 ? result : String(DEFAULT_HOSTNAME);
 }
 
 // Power Management
@@ -167,6 +180,7 @@ void handleWifiConfig() {
   } else {
     html.replace("%PCPWR_CHECKED%", "");
   }
+  html.replace("%HOSTNAME%", deviceHostname);
   server.send(200, "text/html", html);
 }
 
@@ -190,14 +204,16 @@ void handleSaveConfig() {
   String nSSID = server.arg("ssid");
   String nPass = server.arg("pass");
   String nPCPower = server.arg("pcpwr"); // "on" or empty
-  
-  if (nSSID.length() > 0) {
+  String nHostname = sanitizeHostname(server.arg("hostname"));
+
+  if (nSSID.length() > 0 || server.arg("hostname").length() > 0) {
     preferences.begin("wifi", false);
     preferences.putString("ssid", nSSID);
     preferences.putString("pass", nPass);
     preferences.putBool("pc_pwr", nPCPower == "on");
+    preferences.putString("hostname", nHostname);
     preferences.end();
-    server.send(200, "text/plain", "Credentials saved. Rebooting...");
+    server.send(200, "text/plain", "Settings saved. Rebooting...");
     delay(2000);
     ESP.restart();
   } else {
@@ -429,6 +445,7 @@ void setup() {
 
   preferences.begin("wifi", true);
   pcPowerEnabled = preferences.getBool("pc_pwr", DEFAULT_PC_POWER_ENABLED);
+  deviceHostname = sanitizeHostname(preferences.getString("hostname", DEFAULT_HOSTNAME));
   preferences.end();
 
   // Setup Power Pins
@@ -457,7 +474,7 @@ void setup() {
   // Signature matches arduino-esp32's official W5500 example; verify against
   // your installed core's ETH.h if this fails to compile.
   ETH.begin(ETH_PHY_W5500, 1, PIN_ETH_CS, PIN_ETH_INT, PIN_ETH_RST, SPI3_HOST, PIN_ETH_SCK, PIN_ETH_MISO, PIN_ETH_MOSI);
-  ETH.setHostname("smartmouse");
+  ETH.setHostname(deviceHostname.c_str());
 
   Serial.print("Probing for Ethernet (W5500)");
   unsigned long ethStartTime = millis();
@@ -479,7 +496,7 @@ void setup() {
     preferences.end();
 
     WiFi.mode(WIFI_STA); // Force Station mode to ensure DHCP hostname registers correctly
-    WiFi.setHostname("smartmouse");
+    WiFi.setHostname(deviceHostname.c_str());
     WiFi.begin(storedSSID.c_str(), storedPass.c_str());
     Serial.print("Connecting to WiFi");
 
@@ -510,9 +527,9 @@ void setup() {
   // Initialize Name Resolvers AFTER getting an IP address, over whichever
   // interface (WiFi or Ethernet) came up - skipped in AP mode.
   if (!isAPMode) {
-    if (MDNS.begin("smartmouse")) {
-      MDNS.setInstanceName("smartmouse");
-      Serial.println("MDNS responder started: smartmouse.local");
+    if (MDNS.begin(deviceHostname.c_str())) {
+      MDNS.setInstanceName(deviceHostname);
+      Serial.printf("MDNS responder started: %s.local\n", deviceHostname.c_str());
       MDNS.addService("http", "tcp", 80);
       MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
       MDNS.addService("ws", "tcp", 81);
@@ -520,14 +537,14 @@ void setup() {
     } else {
       Serial.println("Error setting up MDNS responder!");
     }
-    NBNS.begin("smartmouse"); // Add NetBIOS for fallback legacy support
+    NBNS.begin(deviceHostname.c_str()); // Add NetBIOS for fallback legacy support
   }
 
   lastTelemetryTime = millis();
   lastActivityTime = millis();
 
   // Setup OTA
-  ArduinoOTA.setHostname("smartmouse");
+  ArduinoOTA.setHostname(deviceHostname.c_str());
   ArduinoOTA.setPassword(secret_key); // Require the SmartMouse secret key for OTA updates
   ArduinoOTA.onStart([]() { Serial.println("OTA Update Started"); });
   ArduinoOTA.onEnd([]() { Serial.println("\nOTA Update Finished"); });
