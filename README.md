@@ -54,7 +54,7 @@ Click the **Upload** button (→ arrow icon). If it fails to find the port or up
 The board has no network configured yet, so it starts its own WiFi hotspot:
 1. On your phone or laptop, connect to the WiFi network **`SmartMouse-Setup`** (password `SmartMouse123`).
 2. A setup page should open automatically (captive portal); if not, open a browser and go to `http://192.168.4.1/wifi`.
-3. Pick your home WiFi network, enter its password, and (if you wired it up) check "Enable PC Power Control".
+3. Pick your home WiFi network, enter its password, optionally set a "Device Name" (useful once you have more than one SmartMouse — this becomes its hostname, e.g. `<name>.local`), and (if you wired it up) check "Enable PC Power Control".
 4. Click **Save** — the board restarts and joins your home WiFi.
 
 ### 8. Find the device on your network
