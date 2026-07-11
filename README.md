@@ -61,7 +61,7 @@ The board has no network configured yet, so it starts its own WiFi hotspot:
 Look it up in your router's connected-devices list, or try `http://smartmouse.local` in a browser. Note its IP address — you'll need it for the Home Assistant integration.
 
 ### 9. Install the Home Assistant integration
-1. Copy the `Home Assistant Custom Component` folder into Home Assistant's `custom_components` directory, and rename the copied folder to `smartmouse`.
+1. Copy the `custom_components/smartmouse` folder from this repo into your Home Assistant config's `custom_components` directory (create that directory first if it doesn't exist yet) — no renaming needed, it's already named correctly.
 2. Restart Home Assistant.
 3. **Settings → Devices & Services → Add Integration** → search for "SmartMouse" → enter the device's IP address, port `81`, and the secret key you set in step 5.
 
@@ -108,7 +108,7 @@ Leave it unwired on devices that should stay on WiFi — the boot-time probe fai
 ## Home Assistant Configuration
 
 ### Installation
-See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy `Home Assistant Custom Component` into `custom_components/smartmouse`, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
+See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy this repo's `custom_components/smartmouse` folder into your Home Assistant config's `custom_components` directory, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
 
 ### Gyro / UI Configuration
 When using the custom card, you can tune the following parameters in the card's YAML:
