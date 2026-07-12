@@ -1,34 +1,15 @@
 import { TouchpadHandler } from './touchpad-handler';
-import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
-import { customElement, query } from 'lit/decorators.js';
+import { query } from 'lit/decorators.js';
 
-@customElement('smartmouse-touchpad-card-editor')
-export class SmartMouseTouchpadCardEditor extends SmartMouseCardEditorBase {
-  protected renderExtraOptions() {
-    return html`
-      <div class="option">
-        <label>Touchpad Sensitivity (Default: 1.8)</label>
-        <input type="number" step="0.1" .value=${this._config.mouseSensitivity ?? 1.8} @input=${(e: any) => this._valueChanged(e, 'mouseSensitivity')}>
-      </div>
-      <div class="option">
-        <label>Scroll Sensitivity (Default: 3.0)</label>
-        <input type="number" step="0.1" .value=${this._config.scrollSensitivity ?? 3.0} @input=${(e: any) => this._valueChanged(e, 'scrollSensitivity')}>
-      </div>
-      <div class="option">
-        <label>Scroll Type</label>
-        <select .value=${this._config.scrollType || 'touchpad'} @change=${(e: any) => this._valueChanged(e, 'scrollType')}>
-          <option value="touchpad">High-Resolution (Precision Touchpad)</option>
-          <option value="wheel">Standard (Mouse Wheel)</option>
-        </select>
-      </div>
-      <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
-        <input type="checkbox" id="invert-scroll" style="width: auto; margin: 0;" .checked=${this._config.invertScroll || false} @change=${(e: any) => this._valueChanged(e, 'invertScroll')}>
-        <label style="cursor: pointer;" for="invert-scroll">Invert Scroll Direction</label>
-      </div>
-    `;
-  }
-}
+const COMPUTE_LABEL = computeLabelFactory({
+  device_id: 'Target Device',
+  mouseSensitivity: 'Touchpad Sensitivity (Default: 1.8)',
+  scrollSensitivity: 'Scroll Sensitivity (Default: 3.0)',
+  scrollType: 'Scroll Type',
+  invertScroll: 'Invert Scroll Direction',
+});
 
 class SmartMouseTouchpadCard extends SmartMouseCardBase {
   private touchpadHandler!: TouchpadHandler;
@@ -36,7 +17,28 @@ class SmartMouseTouchpadCard extends SmartMouseCardBase {
   @query('.pad') private padEl!: HTMLElement;
   @query('.scroll-area') private scrollAreaEl!: HTMLElement;
 
-  static getConfigElement() { return document.createElement("smartmouse-touchpad-card-editor"); }
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'device_id', selector: { device: {} } },
+        { name: 'mouseSensitivity', selector: { number: { mode: 'box', step: 0.1 } } },
+        { name: 'scrollSensitivity', selector: { number: { mode: 'box', step: 0.1 } } },
+        {
+          name: 'scrollType',
+          selector: {
+            select: {
+              options: [
+                { value: 'touchpad', label: 'High-Resolution (Precision Touchpad)' },
+                { value: 'wheel', label: 'Standard (Mouse Wheel)' },
+              ],
+            },
+          },
+        },
+        { name: 'invertScroll', selector: { boolean: {} } },
+      ],
+      computeLabel: COMPUTE_LABEL,
+    };
+  }
   static getStubConfig() { return { type: "custom:smartmouse-touchpad-card" }; }
 
   protected onConfigUpdated(config: any) {
