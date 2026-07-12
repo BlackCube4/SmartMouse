@@ -1,34 +1,15 @@
 import { GyroHandler } from './gyro-handler';
-import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
-import { customElement, query } from 'lit/decorators.js';
+import { query } from 'lit/decorators.js';
 
-@customElement('smartmouse-gyro-card-editor')
-export class SmartMouseGyroCardEditor extends SmartMouseCardEditorBase {
-  protected renderExtraOptions() {
-    return html`
-      <div class="option">
-        <label>Gyro Mode</label>
-        <select .value=${this._config.gyroMode || 'relative'} @change=${(e: any) => this._valueChanged(e, 'gyroMode')}>
-          <option value="relative">Relative (Standard Air Mouse)</option>
-          <option value="absolute">Absolute (Laser Pointer)</option>
-        </select>
-      </div>
-      <div class="option">
-        <label>Custom Button Text (Optional)</label>
-        <input type="text" .value=${this._config.buttonText || ''} @input=${(e: any) => this._valueChanged(e, 'buttonText')} placeholder="Default">
-      </div>
-      <div class="option">
-        <label>Custom Button Icon (Optional)</label>
-        <input type="text" .value=${this._config.buttonIcon || ''} @input=${(e: any) => this._valueChanged(e, 'buttonIcon')} placeholder="e.g. mdi:laser-pointer">
-      </div>
-      <div class="option" style="flex-direction: row; align-items: center; gap: 8px;">
-        <input type="checkbox" id="hide-text" style="width: auto; margin: 0;" .checked=${this._config.hideText || false} @change=${(e: any) => this._valueChanged(e, 'hideText')}>
-        <label style="cursor: pointer;" for="hide-text">Hide Button Text</label>
-      </div>
-    `;
-  }
-}
+const COMPUTE_LABEL = computeLabelFactory({
+  device_id: 'Target Device',
+  gyroMode: 'Gyro Mode',
+  buttonText: 'Custom Button Text (Optional)',
+  buttonIcon: 'Custom Button Icon (Optional)',
+  hideText: 'Hide Button Text',
+});
 
 class SmartMouseGyroCard extends SmartMouseCardBase {
   private gyroHandler!: GyroHandler;
@@ -38,7 +19,28 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
   @query('.gyro-btn') private btnEl?: HTMLElement;
   @query('.debug') private debugEl?: HTMLElement;
 
-  static getConfigElement() { return document.createElement("smartmouse-gyro-card-editor"); }
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'device_id', selector: { device: {} } },
+        {
+          name: 'gyroMode',
+          selector: {
+            select: {
+              options: [
+                { value: 'relative', label: 'Relative (Standard Air Mouse)' },
+                { value: 'absolute', label: 'Absolute (Laser Pointer)' },
+              ],
+            },
+          },
+        },
+        { name: 'buttonText', selector: { text: {} } },
+        { name: 'buttonIcon', selector: { icon: {} } },
+        { name: 'hideText', selector: { boolean: {} } },
+      ],
+      computeLabel: COMPUTE_LABEL,
+    };
+  }
   static getStubConfig() { return { type: "custom:smartmouse-gyro-card", gyroMode: "relative" }; }
 
   // Only recreate the handler when device_id/gyroMode actually change -
