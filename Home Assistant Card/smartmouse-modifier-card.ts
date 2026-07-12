@@ -1,9 +1,8 @@
-import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { state } from 'lit/decorators.js';
 
-@customElement('smartmouse-modifier-card-editor')
-export class SmartMouseModifierCardEditor extends SmartMouseCardEditorBase {}
+const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device' });
 
 interface ModifierKey {
   label: string;
@@ -22,7 +21,14 @@ const MODIFIER_KEYS: ModifierKey[] = [
 class SmartMouseModifierCard extends SmartMouseCardBase {
   @state() private modifierState: Record<string, boolean> = { ctrl: false, shift: false, alt: false, win: false };
 
-  static getConfigElement() { return document.createElement("smartmouse-modifier-card-editor"); }
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'device_id', selector: { device: {} } },
+      ],
+      computeLabel: COMPUTE_LABEL,
+    };
+  }
 
   static getStubConfig() {
     return { type: "custom:smartmouse-modifier-card" };

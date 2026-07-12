@@ -1,60 +1,14 @@
 import { ServiceManager } from './service-manager';
 import { HomeAssistant } from './types';
-import { LitElement, html, css, PropertyValues } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { LitElement, PropertyValues } from 'lit';
+import { state } from 'lit/decorators.js';
 
-// Shared editor base: renders the "Target Device" selector every card needs,
-// subclasses add their own fields via renderExtraOptions().
-export abstract class SmartMouseCardEditorBase extends LitElement {
-  @property({ attribute: false }) public hass!: HomeAssistant;
-  @state() protected _config: any;
-
-  setConfig(config: any) {
-    this._config = config;
-  }
-
-  protected _valueChanged(ev: any, key: string) {
-    if (!this._config) return;
-    const target = ev.target as any;
-    let value = target.type === 'checkbox' ? target.checked : (ev.detail?.value !== undefined ? ev.detail.value : target.value);
-    if (target.type === 'number' && value !== '') {
-      value = parseFloat(value);
-    }
-    if (this._config[key] === value) return;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: { ...this._config, [key]: value } },
-      bubbles: true, composed: true
-    }));
-  }
-
-  protected renderExtraOptions() {
-    return html``;
-  }
-
-  protected render() {
-    if (!this._config) return html``;
-    return html`
-      <div class="card-config">
-        <div class="option">
-          <label>Target Device</label>
-          <ha-selector
-            .hass=${this.hass}
-            .selector=${{ device: {} }}
-            .value=${this._config.device_id || ''}
-            @value-changed=${(e: any) => this._valueChanged(e, 'device_id')}
-          ></ha-selector>
-        </div>
-        ${this.renderExtraOptions()}
-      </div>
-    `;
-  }
-
-  static styles = css`
-    .card-config { display: flex; flex-direction: column; gap: 12px; }
-    .option { display: flex; flex-direction: column; gap: 4px; }
-    label { font-size: 14px; font-weight: 500; color: var(--primary-text-color, #fff); margin: 0; }
-    input, select { padding: 8px; border-radius: 4px; background: var(--card-background-color, #2a2b2e); color: var(--primary-text-color, #fff); border: 1px solid var(--divider-color, #3a3b3d); outline: none; }
-  `;
+// Every card's getConfigForm() returns a computeLabel alongside its schema -
+// this just wraps a plain name->label map into the function shape HA expects,
+// falling back to the raw field name for anything unmapped (e.g. device_id,
+// which HA already labels sensibly on its own).
+export function computeLabelFactory(labels: Record<string, string>) {
+  return (schema: { name: string }) => labels[schema.name] || schema.name;
 }
 
 // Shared card base: handles hass wiring and ServiceManager lifecycle.
