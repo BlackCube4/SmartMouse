@@ -1,27 +1,29 @@
-import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
-import { customElement } from 'lit/decorators.js';
 
-@customElement('smartmouse-input-card-editor')
-export class SmartMouseInputCardEditor extends SmartMouseCardEditorBase {
-  protected renderExtraOptions() {
-    return html`
-      <div class="option">
-        <label>Input Mode</label>
-        <select .value=${this._config.inputType || 'buffered'} @change=${(e: any) => this._valueChanged(e, 'inputType')}>
-          <option value="buffered">Buffered (Press Enter to send)</option>
-          <option value="live">Live (Sends as you type)</option>
-        </select>
-      </div>
-    `;
-  }
-}
+const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device', inputType: 'Input Mode' });
 
 class SmartMouseInputCard extends SmartMouseCardBase {
   private lastInputValue = " ";
 
-  static getConfigElement() {
-    return document.createElement("smartmouse-input-card-editor");
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'device_id', selector: { device: {} } },
+        {
+          name: 'inputType',
+          selector: {
+            select: {
+              options: [
+                { value: 'buffered', label: 'Buffered (Press Enter to send)' },
+                { value: 'live', label: 'Live (Sends as you type)' },
+              ],
+            },
+          },
+        },
+      ],
+      computeLabel: COMPUTE_LABEL,
+    };
   }
 
   static getStubConfig() {
