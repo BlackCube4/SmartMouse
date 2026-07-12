@@ -1,10 +1,9 @@
-import { SmartMouseCardEditorBase, SmartMouseCardBase } from './base-card';
+import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { MouseButton, KeyMode } from './types';
 import { html, css } from 'lit';
-import { customElement, query } from 'lit/decorators.js';
+import { query } from 'lit/decorators.js';
 
-@customElement('smartmouse-desktop-card-editor')
-export class SmartMouseDesktopCardEditor extends SmartMouseCardEditorBase {}
+const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device' });
 
 class SmartMouseDesktopCard extends SmartMouseCardBase {
   private isLocked = false;
@@ -12,7 +11,14 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   @query('.overlay') private overlayEl!: HTMLElement;
   @query('.decoy') private decoyInputEl!: HTMLInputElement;
 
-  static getConfigElement() { return document.createElement("smartmouse-desktop-card-editor"); }
+  static getConfigForm() {
+    return {
+      schema: [
+        { name: 'device_id', selector: { device: {} } },
+      ],
+      computeLabel: COMPUTE_LABEL,
+    };
+  }
   static getStubConfig() { return { type: "custom:smartmouse-desktop-card" }; }
 
   // Element-scoped listeners can bind declaratively, but pointer lock relies
