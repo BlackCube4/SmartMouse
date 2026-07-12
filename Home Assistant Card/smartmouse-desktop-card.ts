@@ -3,7 +3,8 @@ import { MouseButton, KeyMode } from './types';
 import { html, css } from 'lit';
 import { query } from 'lit/decorators.js';
 
-const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device' });
+const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device', height: 'Card Height' });
+const DEFAULT_HEIGHT = 400;
 
 class SmartMouseDesktopCard extends SmartMouseCardBase {
   private isLocked = false;
@@ -15,11 +16,16 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
     return {
       schema: [
         { name: 'device_id', selector: { device: {} } },
+        { name: 'height', selector: { number: { mode: 'box', min: 100, max: 1000, unit_of_measurement: 'px' } } },
       ],
       computeLabel: COMPUTE_LABEL,
     };
   }
   static getStubConfig() { return { type: "custom:smartmouse-desktop-card" }; }
+
+  protected onConfigUpdated(config: any) {
+    this.style.height = `${config.height || DEFAULT_HEIGHT}px`;
+  }
 
   // Element-scoped listeners can bind declaratively, but pointer lock relies
   // on document/window-level listeners with no Lit template equivalent, and
@@ -135,7 +141,6 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   static styles = css`
     :host {
       display: flex;
-      height: 400px;
       width: 100%;
       flex-direction: column;
       align-items: center;
