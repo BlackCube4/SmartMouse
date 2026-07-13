@@ -12,6 +12,7 @@ const COMPUTE_LABEL = computeLabelFactory({
   gyroSensitivity: 'Sensitivity (Default: 8)',
   smoothing: 'Smoothing (0 = off, 1 = max)',
   gyroTightenThreshold: 'Jitter Suppression (deg/s, Default: 3)',
+  height: 'Button Height (optional)',
 });
 
 class SmartMouseGyroCard extends SmartMouseCardBase {
@@ -43,6 +44,7 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
         { name: 'gyroSensitivity', selector: { number: { mode: 'box', min: 1, max: 30, step: 0.5 } } },
         { name: 'smoothing', selector: { number: { mode: 'slider', min: 0, max: 1, step: 0.05 } } },
         { name: 'gyroTightenThreshold', selector: { number: { mode: 'box', min: 0, max: 20, step: 0.5, unit_of_measurement: 'deg/s' } } },
+        { name: 'height', selector: { number: { mode: 'box', min: 30, max: 400, unit_of_measurement: 'px' } } },
       ],
       computeLabel: COMPUTE_LABEL,
     };
@@ -71,6 +73,14 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
   protected updated() {
     if (this.debugEl) {
       this.gyroHandler.debugElem = this.debugEl;
+    }
+    if (this.btnEl) {
+      // Explicit height (if set) is fixed so calibration text vs icon+text
+      // doesn't resize the button; otherwise it sizes naturally (compact for
+      // an icon-only button) via the CSS min-height.
+      const h = this._config.height;
+      this.btnEl.style.height = h ? `${h}px` : '';
+      this.btnEl.style.minHeight = h ? `${h}px` : '';
     }
     // GyroHandler owns the button's innerHTML while calibrating - don't fight it.
     if (this.btnEl && !this.gyroHandler.calibrating) {
@@ -150,7 +160,7 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
     :host { display: flex; flex-direction: column; gap: 8px; }
     .gyro-btn {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      min-height: 72px;
+      min-height: 48px;
       padding: 12px; border-radius: var(--ha-card-border-radius, 8px); background: var(--dark, #2b2c2f);
       color: var(--primary-text-color, #fff); border: none; cursor: pointer; touch-action: manipulation;
     }
