@@ -274,8 +274,7 @@ export class UIBuilder {
     Object.assign(liveWrapper.style, { position: 'relative', width: '15%', margin: '0', padding: '0' });
 
     const liveInput = document.createElement('input');
-    liveInput.type = 'text';
-    liveInput.setAttribute('inputmode', 'text');
+    liveInput.type = 'url'; // disables Android autocorrect/predictions, no PW prompt
     liveInput.setAttribute('data-1p-ignore', 'true');
     liveInput.setAttribute('data-bwignore', 'true');
     liveInput.setAttribute('data-lpignore', 'true');

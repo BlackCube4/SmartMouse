@@ -47,8 +47,16 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
     document.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
   }
 
+  // In Home Assistant this card lives inside nested shadow roots, so
+  // document.pointerLockElement is retargeted and never equals `this`. The
+  // shadow root / document that actually contains us reports the real locked
+  // element, so query pointerLockElement there instead.
+  private get lockRoot(): DocumentOrShadowRoot {
+    return this.getRootNode() as unknown as DocumentOrShadowRoot;
+  }
+
   private handlePointerMove = (e: MouseEvent) => {
-    if (this.isLocked && document.pointerLockElement) {
+    if (this.isLocked) {
       this.serviceManager.sendMove(e.movementX || 0, e.movementY || 0);
     }
   };
@@ -68,7 +76,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   private blockScroll = (e: Event) => { if (this.isLocked) e.preventDefault(); };
 
   private handlePointerLockChange = () => {
-    if (document.pointerLockElement === this) {
+    if (this.lockRoot.pointerLockElement === this) {
       this.isLocked = true;
       this.overlayEl.textContent = "System Locked. Escape to Exit";
       this.style.background = "var(--dark, #232427)";

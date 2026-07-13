@@ -1,9 +1,7 @@
 import { GyroHandler, GyroDebugInfo } from './gyro-handler';
-import { SmartMouseCardBase, computeLabelFactory } from './base-card';
+import { SmartMouseCardBase } from './base-card';
 import { html, css } from 'lit';
 import { state } from 'lit/decorators.js';
-
-const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device (optional)' });
 
 type Level = 'good' | 'fair' | 'poor' | 'waiting';
 
@@ -15,11 +13,10 @@ class SmartMouseDebugCard extends SmartMouseCardBase {
   private monitor?: GyroHandler;
   private pollTimer?: number;
 
+  // No options: this card monitors the phone's own sensor, so it isn't tied to
+  // a device. An empty schema keeps the visual editor clean.
   static getConfigForm() {
-    return {
-      schema: [{ name: 'device_id', selector: { device: {} } }],
-      computeLabel: COMPUTE_LABEL,
-    };
+    return { schema: [] };
   }
   static getStubConfig() { return { type: 'custom:smartmouse-debug-card' }; }
 
@@ -53,6 +50,12 @@ class SmartMouseDebugCard extends SmartMouseCardBase {
     return 'poor';
   }
 
+  private resolutionText(info: GyroDebugInfo): string {
+    if (info.resolution <= 0) return '—';
+    if (info.resolution < 0.001) return '<0.001° (continuous)';
+    return `${info.resolution.toFixed(3)}°`;
+  }
+
   private verdict(info: GyroDebugInfo): { level: Level; text: string } {
     if (!info.listening || info.frequency <= 0) {
       return { level: 'waiting', text: 'Waiting for sensor data — move the device. (Some browsers need motion-sensor permission.)' };
@@ -76,7 +79,7 @@ class SmartMouseDebugCard extends SmartMouseCardBase {
       <table>
         <tr><td>Source</td><td>${info?.source ?? '—'}</td></tr>
         <tr><td>Refresh rate</td><td class=${info ? this.freqLevel(info.frequency) : ''}>${info ? fmt(info.frequency, 1) : '—'} Hz</td></tr>
-        <tr><td>Resolution</td><td class=${info ? this.resLevel(info.resolution) : ''}>${info && info.resolution > 0 ? `${fmt(info.resolution, 3)}°` : '—'}</td></tr>
+        <tr><td>Resolution</td><td class=${info ? this.resLevel(info.resolution) : ''}>${info ? this.resolutionText(info) : '—'}</td></tr>
         <tr><td>Yaw (X)</td><td>${info ? fmt(info.orientation.x) : '—'}°</td></tr>
         <tr><td>Pitch (Y)</td><td>${info ? fmt(info.orientation.y) : '—'}°</td></tr>
         <tr><td>Roll (Z)</td><td>${info ? fmt(info.orientation.z) : '—'}°</td></tr>

@@ -63,8 +63,7 @@ class SmartMouseInputCard extends SmartMouseCardBase {
         <div class="wrapper">
           <input
             class="live-input"
-            type="text"
-            inputmode="text"
+            type="url"
             enterkeyhint="enter"
             data-1p-ignore="true"
             data-bwignore="true"
