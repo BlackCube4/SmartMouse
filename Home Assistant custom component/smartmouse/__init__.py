@@ -85,6 +85,7 @@ SERVICE_WHEEL_SCROLL_SCHEMA = vol.Schema({
 SERVICE_TOUCHPAD_SCROLL_SCHEMA = vol.Schema({
     vol.Optional("x", default=0): vol.Coerce(int),
     vol.Optional("y", default=0): vol.Coerce(int),
+    vol.Optional("end", default=False): cv.boolean,
     vol.Optional("device_id"): vol.Any(cv.string, list),
 })
 
@@ -239,21 +240,24 @@ async def async_setup_entry(hass, entry: ConfigEntry):
 
     # 0x42, 0x4F: TOUCHPAD SCROLL
     async def handle_touchpad_scroll(call):
-        """Send high-res touchpad scroll movement (dx, dy) or scroll end (dx=0, dy=0)."""
+        """Move the two scroll fingers (x, y) or lift them (end: true).
+
+        (0, 0) is a keepalive that holds the fingers in place, so lifting must
+        be requested explicitly via end=true - otherwise a paused scroll would
+        end and Windows would misread the resume as a cursor move.
+        """
         ws_link = get_ws_link(call)
         if not ws_link: return
-        x = int(call.data.get("x", 0))
-        y = int(call.data.get("y", 0))
-        
-        if x == 0 and y == 0:
+
+        if call.data.get("end"):
             # Opcode 0x4F: SCROLL END (1 byte total)
-            opcode = OPCODE_SCROLL_END
-            packet = struct.pack("<B", opcode)
+            packet = struct.pack("<B", OPCODE_SCROLL_END)
         else:
             # Opcode 0x42: HIGH-RES SCROLL (5 bytes total)
-            opcode = OPCODE_SCROLL_TOUCHPAD
-            packet = struct.pack("<Bhh", opcode, x, y)
-            
+            x = int(call.data.get("x", 0))
+            y = int(call.data.get("y", 0))
+            packet = struct.pack("<Bhh", OPCODE_SCROLL_TOUCHPAD, x, y)
+
         await ws_link.send(packet, binary=True)
         
     # 0x11, 0x12, 0x13: KEYBOARD CONTROL

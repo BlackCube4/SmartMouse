@@ -220,57 +220,69 @@ export class TouchpadHandler {
   }
 
   setupScrollArea(scrollArea: HTMLElement) {
-    let lastY = 0;
     let scrolling = false;
+    let lastY = 0;
     let accumulatedScroll = 0;
-    // Whether the firmware currently holds the two scroll fingers down.
     let fingersDown = false;
-    // If the finger is held still mid-scroll, Windows lets the stale two-finger
-    // contact time out, and resuming gets misread as a cursor move. So after a
-    // short idle we cleanly lift the fingers; the next movement then starts a
-    // fresh scroll gesture (the firmware re-centers automatically).
-    let idleTimer: number | null = null;
+    let lastSendTime = 0;
+    let keepaliveTimer: number | null = null;
 
+    // A real precision touchpad reports its contacts continuously while fingers
+    // are down. We mimic that: while a scroll is active, resend the current
+    // finger position at a fixed rate so Windows keeps the two-finger scroll
+    // gesture alive instead of timing the stale contact out (which made a
+    // paused-then-resumed scroll get misread as a cursor move). Fingers are
+    // only lifted on the real touchend, so an abrupt stop with the finger still
+    // down no longer ends the scroll (and no longer triggers OS scroll inertia).
+    const KEEPALIVE_MS = 60;
     const isTouchpadMode = () => this.config.scrollType !== 'wheel';
 
-    const liftFingers = () => {
-      if (fingersDown && isTouchpadMode()) {
-        this.serviceManager.sendTouchpadScroll(0, 0);
+    const sendMove = (amount: number) => {
+      if (this.config.scrollType === 'wheel') {
+        // Standard wheel conventionally expects inverted Y relative to the gesture
+        this.serviceManager.sendScrollWheel(-(this.config.invertScroll ? -amount : amount));
+        return;
       }
-      fingersDown = false;
+      this.serviceManager.sendTouchpadScroll(0, this.config.invertScroll ? -amount : amount);
+      fingersDown = true;
+      lastSendTime = performance.now();
     };
 
-    const armIdleLift = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(liftFingers, 120);
+    const keepalive = () => {
+      if (!scrolling || !isTouchpadMode()) return;
+      if (performance.now() - lastSendTime >= KEEPALIVE_MS) {
+        this.serviceManager.sendTouchpadScroll(0, 0); // hold: resend current position
+        fingersDown = true;
+        lastSendTime = performance.now();
+      }
     };
 
     const startScroll = (e: TouchEvent) => {
       e.preventDefault();
       scrolling = true;
       lastY = e.touches[0].clientY;
+      accumulatedScroll = 0;
+      if (isTouchpadMode()) {
+        // Place the fingers right away so the gesture is recognised immediately
+        // (removes the "scroll only starts after some travel" dead zone).
+        this.serviceManager.sendTouchpadScroll(0, 0);
+        fingersDown = true;
+        lastSendTime = performance.now();
+        if (keepaliveTimer === null) keepaliveTimer = window.setInterval(keepalive, KEEPALIVE_MS);
+      }
     };
 
     const moveScroll = (e: TouchEvent) => {
       if (!scrolling) return;
       e.preventDefault();
       const currentY = e.touches[0].clientY;
-      const delta = lastY - currentY;
+      accumulatedScroll += lastY - currentY;
       lastY = currentY;
-      accumulatedScroll += delta;
 
-      const scrollAmount = Math.floor(accumulatedScroll * this.SCROLL_GAIN);
-      if (Math.abs(scrollAmount) >= 1) {
-        const finalScroll = this.config.invertScroll ? -scrollAmount : scrollAmount;
-        if (this.config.scrollType === 'wheel') {
-          // Standard wheel conventionally expects inverted Y relative to the touchpad gesture
-          this.serviceManager.sendScrollWheel(-finalScroll);
-        } else {
-          this.serviceManager.sendTouchpadScroll(0, finalScroll);
-          fingersDown = true;
-          armIdleLift();
-        }
-        accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
+      const amount = Math.trunc(accumulatedScroll * this.SCROLL_GAIN);
+      if (amount !== 0) {
+        sendMove(amount);
+        accumulatedScroll -= amount / this.SCROLL_GAIN;
       }
     };
 
@@ -279,8 +291,11 @@ export class TouchpadHandler {
       e.preventDefault();
       scrolling = false;
       accumulatedScroll = 0;
-      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-      liftFingers();
+      if (keepaliveTimer !== null) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+      if (fingersDown && isTouchpadMode()) {
+        this.serviceManager.endTouchpadScroll();
+      }
+      fingersDown = false;
     };
 
     scrollArea.addEventListener("touchstart", startScroll as EventListener, { passive: false });

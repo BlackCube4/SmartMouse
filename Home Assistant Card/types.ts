@@ -34,6 +34,7 @@ export interface IServiceManager {
   sendButton(button: MouseButton, mode: KeyMode): void;
   sendScrollWheel(delta: number): void;
   sendTouchpadScroll(dx: number, dy: number): void;
+  endTouchpadScroll(): void;
   sendKey(keycode: number, mode: KeyMode): void;
   sendMediaKey(code: number, mode?: KeyMode): void;
   sendText(text: string): void;

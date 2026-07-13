@@ -129,13 +129,15 @@ export class WsServiceManager implements IServiceManager {
     this.ws!.send(view.buffer);
   }
 
+  // (0,0) is a keepalive: it re-places/holds the two fingers so the firmware
+  // keeps the gesture alive. Lifting is a separate, explicit call.
   sendTouchpadScroll(dx: number, dy: number): void {
+    this.sendOpInt16(OP.SCROLL_TOUCHPAD, dx, dy);
+  }
+
+  endTouchpadScroll(): void {
     if (!this.ready()) return;
-    if (dx === 0 && dy === 0) {
-      this.ws!.send(new Uint8Array([OP.SCROLL_END])); // lift fingers
-    } else {
-      this.sendOpInt16(OP.SCROLL_TOUCHPAD, dx, dy);
-    }
+    this.ws!.send(new Uint8Array([OP.SCROLL_END])); // lift fingers
   }
 
   sendKey(keycode: number, mode: KeyMode): void {

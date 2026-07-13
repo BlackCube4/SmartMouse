@@ -38,6 +38,10 @@ export class ServiceManager implements IServiceManager {
     this._call("touchpad_scroll", { x: dx, y: dy });
   }
 
+  endTouchpadScroll(): void {
+    this._call("touchpad_scroll", { end: true });
+  }
+
   sendKey(keycode: number, mode: KeyMode): void {
     this._call("key_control", { keycode, mode });
   }

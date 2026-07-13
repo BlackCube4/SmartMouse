@@ -87,7 +87,9 @@ scroll_wheel:
 
 touchpad_scroll:
   name: Touchpad Scroll
-  description: Send high-res touchpad scroll movement.
+  description: >-
+    Move the two scroll fingers by (x, y). (0, 0) holds them in place (keepalive).
+    Set end=true to lift the fingers and finish the gesture.
   target:
     device:
       integration: smartmouse
@@ -104,6 +106,12 @@ touchpad_scroll:
       selector:
         number:
           mode: box
+    end:
+      name: End Gesture
+      description: Lift the scroll fingers (ignores x/y).
+      default: false
+      selector:
+        boolean:
 
 key_control:
   name: Key Control

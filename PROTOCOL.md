@@ -33,7 +33,7 @@ little-endian.
 | `0x23` | MEDIA_SEND | client → device | `int16 consumer_code` | ✅ | ✅ | ❌ (not exposed in the standalone page's UI, press/release only) |
 | `0x31` | TEXT_SEND | client → device | `utf8 text, \0` | ✅ | ✅ | ✅ |
 | `0x41` | SCROLL_WHEEL | client → device | `int8 steps` | ✅ | ✅ | ✅ |
-| `0x42` | SCROLL_TOUCHPAD | client → device | `int16 dx, int16 dy` | ✅ | ✅ | ✅ |
+| `0x42` | SCROLL_TOUCHPAD | client → device | `int16 dx, int16 dy` (dx=dy=0 = keepalive: hold fingers in place) | ✅ | ✅ | ✅ |
 | `0x44` | TOUCHPAD_GESTURE | client → device | `uint8 mask, [int16 x, int16 y] * 5` | ✅ | ❌ | ❌ (5-finger gesture, only used by the TS touchpad card) |
 | `0x4F` | SCROLL_END | client → device | *(none)* | ✅ | ✅ | ✅ |
 | `0xA0` | PC_CONTROL | client → device | `uint8 sub_cmd` (`0x01` toggle, `0x02` hard-off, `0x03` on, `0x04` off) | ✅ | ✅ | ✅ |
