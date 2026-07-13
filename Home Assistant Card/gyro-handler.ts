@@ -18,7 +18,19 @@ export class GyroHandler {
   private calibrationStartTime = 0;
   private calibrationDuration = 3000;
   private orientation = { x: 0, y: 0, z: 0 };
-  private lastOrientation: { x: number | null, y: number | null, z: number | null } = { x: null, y: null, z: null };
+  // --- Relative (air mouse) pipeline (Steam-style), see processLoop ---
+  private accumX = 0;
+  private accumY = 0;
+  private lastRawX: number | null = null;
+  private lastRawY: number | null = null;
+  private lastLoopTime = performance.now();
+  private carryX = 0;
+  private carryY = 0;
+  private smoothRing: { x: number, y: number }[] = [];
+  private smoothIndex = 0;
+  private readonly SMOOTH_UPPER = 75; // deg/s; above this, motion passes through unsmoothed
+  private _loopInterval!: number;
+  private _suppressHandler!: (e: any) => void;
   
   private bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
   private smoothX = 0;
@@ -28,9 +40,10 @@ export class GyroHandler {
   private readingCount = 0;
   private measuredFrequency = 0.0;
   
-  private GAIN: number;
-  private SMOOTHING: number;
-  private SUPPRESSION_OFFSET: number;
+  private GAIN!: number;
+  private SMOOTH_WINDOW!: number;
+  private TIGHTEN_THRESHOLD!: number;
+  private SUPPRESSION_OFFSET!: number;
   private suppressionEndTime = 0;
   
   private sensor: any = null;
@@ -41,11 +54,9 @@ export class GyroHandler {
   private originalCalibrateBtnIcon = "";
 
   constructor(private serviceManager: ServiceManager, private config: SmartMouseConfig) {
-    this.GAIN = config.gyroSensitivity ?? 8.0; 
-    this.SMOOTHING = config.smoothing ?? 0.15; 
-    this.SUPPRESSION_OFFSET = config.suppressionOffset ?? 20;
+    this.updateConfig(config);
 
-    setInterval(() => this.processLoop(), 10);
+    this._loopInterval = window.setInterval(() => this.processLoop(), 10);
     this.loadCalibration();
 
     if (this.config.debug) {
@@ -53,19 +64,51 @@ export class GyroHandler {
     }
 
     // Listen for suppression event from TouchpadCard
-    window.addEventListener('smartmouse-gyro-suppress', ((e: CustomEvent) => {
+    this._suppressHandler = ((e: CustomEvent) => {
       if (e.detail && typeof e.detail.ms === 'number') {
         this.setGyroSuppression(e.detail.ms);
       }
-    }) as EventListener);
+    }) as EventListener;
+    window.addEventListener('smartmouse-gyro-suppress', this._suppressHandler);
+  }
+
+  // Live-updatable so editor tweaks apply without recreating the handler
+  // (which would leak the interval/listener).
+  updateConfig(config: SmartMouseConfig) {
+    this.config = config;
+    this.GAIN = config.gyroSensitivity ?? 8.0;
+    const s = Math.max(0, Math.min(1, config.smoothing ?? 0.15));
+    // Ring-buffer length for the slow-motion moving average (higher = smoother).
+    this.SMOOTH_WINDOW = Math.max(1, 1 + Math.round(s * 11));
+    this.TIGHTEN_THRESHOLD = config.gyroTightenThreshold ?? 3.0;
+    this.SUPPRESSION_OFFSET = config.suppressionOffset ?? 20;
+  }
+
+  destroy() {
+    clearInterval(this._loopInterval);
+    window.removeEventListener('smartmouse-gyro-suppress', this._suppressHandler);
+    if (this.sensor) { this.sensor.stop?.(); this.sensor = null; }
+    if (this._boundHandler) {
+      window.removeEventListener("deviceorientation", this._boundHandler, true);
+      this._boundHandler = null;
+    }
+    this.isListening = false;
+    this.gyroRelativeActive = false;
+    this.gyroAbsoluteActive = false;
   }
 
   private processLoop() {
     if (!this.gyroRelativeActive && !this.gyroAbsoluteActive) return;
 
-    if (performance.now() < this.suppressionEndTime) {
-      this.lastOrientation.x = this.orientation.x;
-      this.lastOrientation.y = this.orientation.y;
+    const now = performance.now();
+
+    // During suppression (e.g. just after a touchpad gesture) discard motion
+    // and keep the baseline fresh so the cursor doesn't jump when it resumes.
+    if (now < this.suppressionEndTime) {
+      this.lastRawX = this.orientation.x;
+      this.lastRawY = this.orientation.y;
+      this.accumX = 0; this.accumY = 0;
+      this.lastLoopTime = now;
       return;
     }
 
@@ -74,30 +117,103 @@ export class GyroHandler {
       return;
     }
 
-    if (this.lastOrientation.x === null || this.lastOrientation.y === null) {
-      this.lastOrientation.x = this.orientation.x;
-      this.lastOrientation.y = this.orientation.y;
+    // --- Relative (air mouse) ---
+    const dt = (now - this.lastLoopTime) / 1000;
+    this.lastLoopTime = now;
+    // Skip absurd gaps (e.g. tab was backgrounded) so we don't fling the cursor.
+    if (dt <= 0 || dt > 0.5) {
+      this.accumX = 0; this.accumY = 0;
       return;
     }
 
-    let dX = this.orientation.x - this.lastOrientation.x;
-    let dY = this.orientation.y - this.lastOrientation.y;
+    // Degrees rotated since the last frame, drained from the accumulator that
+    // the sensor callback fills at whatever rate the browser fires.
+    let mx = this.accumX;
+    let my = this.accumY;
+    this.accumX = 0; this.accumY = 0;
 
+    const speed = Math.hypot(mx, my) / dt; // deg/s
+
+    // 1. Tightening: scale down near-still motion to kill sensor jitter, with
+    //    no hard cutoff so slow precise aiming still works.
+    if (this.TIGHTEN_THRESHOLD > 0 && speed < this.TIGHTEN_THRESHOLD) {
+      const scale = speed / this.TIGHTEN_THRESHOLD;
+      mx *= scale; my *= scale;
+    }
+
+    // 2. Tiered smoothing: smooth slow motion, let fast flicks pass through.
+    const smoothed = this.tieredSmooth(mx, my, speed);
+
+    // 3. Gain, invert to screen direction, keep sub-pixel remainder for smooth
+    //    slow motion (round() alone would swallow tiny movements).
+    const outX = smoothed.x * this.GAIN * -10 + this.carryX;
+    const outY = smoothed.y * this.GAIN * -10 + this.carryY;
+    const sendX = Math.trunc(outX);
+    const sendY = Math.trunc(outY);
+    this.carryX = outX - sendX;
+    this.carryY = outY - sendY;
+
+    if (sendX !== 0 || sendY !== 0) {
+      this.serviceManager.sendMove(sendX, sendY);
+    }
+  }
+
+  // Accumulate raw angular movement as sensor readings arrive, regardless of
+  // their rate. Called from both the modern and legacy sensor callbacks, so a
+  // 60Hz and a 120Hz sensor deliver the same total motion to the fixed-rate loop.
+  private accumulateRelative() {
+    if (!this.gyroRelativeActive) return;
+    if (this.lastRawX === null || this.lastRawY === null) {
+      this.lastRawX = this.orientation.x;
+      this.lastRawY = this.orientation.y;
+      return;
+    }
+    let dX = this.orientation.x - this.lastRawX;
+    let dY = this.orientation.y - this.lastRawY;
     if (dX > 180) dX -= 360;
     if (dX < -180) dX += 360;
+    this.accumX += dX;
+    this.accumY += dY;
+    this.lastRawX = this.orientation.x;
+    this.lastRawY = this.orientation.y;
+  }
 
-    this.smoothX = (this.smoothX * this.SMOOTHING) + (dX * (1 - this.SMOOTHING));
-    this.smoothY = (this.smoothY * this.SMOOTHING) + (dY * (1 - this.SMOOTHING));
+  // Jibb Smart's tiered smoothing (the technique Steam Input uses): split each
+  // frame's motion into a "direct" part that passes through immediately and a
+  // "soft" part that goes through a fixed-length moving average. The faster the
+  // motion, the larger the direct part - so quick flicks stay responsive while
+  // slow motion is smoothed. The fixed-N ring initialised to zero preserves the
+  // total movement (sum/N spreads a spike across N frames without losing it).
+  private tieredSmooth(mx: number, my: number, speed: number) {
+    const lower = this.TIGHTEN_THRESHOLD;
+    const upper = this.SMOOTH_UPPER;
+    let directWeight = upper > lower ? (speed - lower) / (upper - lower) : 1;
+    directWeight = Math.max(0, Math.min(1, directWeight));
 
-    this.lastOrientation.x = this.orientation.x;
-    this.lastOrientation.y = this.orientation.y;
+    const softX = mx * (1 - directWeight);
+    const softY = my * (1 - directWeight);
 
-    const moveX = this.smoothX * this.GAIN * -1;
-    const moveY = this.smoothY * this.GAIN * -1;
-
-    if (Math.abs(moveX) > 0.01 || Math.abs(moveY) > 0.01) {
-      this.serviceManager.sendMove(Math.round(moveX * 10), Math.round(moveY * 10)); 
+    const N = this.SMOOTH_WINDOW;
+    if (this.smoothRing.length !== N) {
+      this.smoothRing = Array.from({ length: N }, () => ({ x: 0, y: 0 }));
+      this.smoothIndex = 0;
     }
+    this.smoothRing[this.smoothIndex] = { x: softX, y: softY };
+    this.smoothIndex = (this.smoothIndex + 1) % N;
+
+    let sumX = 0, sumY = 0;
+    for (const s of this.smoothRing) { sumX += s.x; sumY += s.y; }
+
+    return { x: mx * directWeight + sumX / N, y: my * directWeight + sumY / N };
+  }
+
+  private resetRelativeState() {
+    this.accumX = 0; this.accumY = 0;
+    this.carryX = 0; this.carryY = 0;
+    this.lastRawX = null; this.lastRawY = null;
+    this.smoothRing = [];
+    this.smoothIndex = 0;
+    this.lastLoopTime = performance.now();
   }
 
   private processAbsolute() {
@@ -240,6 +356,7 @@ export class GyroHandler {
     let gamma = Math.abs(sinp) >= 1 ? (Math.sign(sinp) * Math.PI / 2) * (180 / Math.PI) : Math.asin(sinp) * (180 / Math.PI);
 
     this.orientation = { x: alpha, y: beta, z: gamma };
+    this.accumulateRelative();
     if (this.calibrating) this.updateCalibrationBounds();
     this.updateDebug("Modern API");
   }
@@ -247,6 +364,7 @@ export class GyroHandler {
   private handleLegacyOrientation(event: any) {
     this.measureFrequency();
     this.orientation = { x: event.alpha || 0, y: event.beta || 0, z: event.gamma || 0 };
+    this.accumulateRelative();
     if (this.calibrating) this.updateCalibrationBounds();
     this.updateDebug("Legacy API", event);
   }
@@ -262,8 +380,8 @@ export class GyroHandler {
       return;
     }
     this.gyroRelativeActive = true;
-    this.smoothX = 0; this.smoothY = 0; this.lastOrientation.x = null;
-    this.startListening(); 
+    this.resetRelativeState();
+    this.startListening();
   }
 
   public async toggleGyroAbsolute() {

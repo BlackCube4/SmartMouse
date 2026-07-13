@@ -5,6 +5,7 @@ export interface SmartMouseConfig {
   scrollSensitivity?: number;
   gyroSensitivity?: number;
   smoothing?: number;
+  gyroTightenThreshold?: number;
   suppressionOffset?: number;
   doubleClickTime?: number;
   holdTime?: number;

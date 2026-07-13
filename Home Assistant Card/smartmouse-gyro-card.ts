@@ -9,6 +9,9 @@ const COMPUTE_LABEL = computeLabelFactory({
   buttonText: 'Custom Button Text (Optional)',
   buttonIcon: 'Custom Button Icon (Optional)',
   hideText: 'Hide Button Text',
+  gyroSensitivity: 'Sensitivity (Default: 8)',
+  smoothing: 'Smoothing (0 = off, 1 = max)',
+  gyroTightenThreshold: 'Jitter Suppression (deg/s, Default: 3)',
 });
 
 class SmartMouseGyroCard extends SmartMouseCardBase {
@@ -37,20 +40,32 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
         { name: 'buttonText', selector: { text: {} } },
         { name: 'buttonIcon', selector: { icon: {} } },
         { name: 'hideText', selector: { boolean: {} } },
+        { name: 'gyroSensitivity', selector: { number: { mode: 'box', min: 1, max: 30, step: 0.5 } } },
+        { name: 'smoothing', selector: { number: { mode: 'slider', min: 0, max: 1, step: 0.05 } } },
+        { name: 'gyroTightenThreshold', selector: { number: { mode: 'box', min: 0, max: 20, step: 0.5, unit_of_measurement: 'deg/s' } } },
       ],
       computeLabel: COMPUTE_LABEL,
     };
   }
   static getStubConfig() { return { type: "custom:smartmouse-gyro-card", gyroMode: "relative" }; }
 
-  // Only recreate the handler when device_id/gyroMode actually change -
-  // cosmetic fields (buttonText/buttonIcon/hideText) just re-render.
+  // Only recreate the handler when device_id/gyroMode actually change; tuning
+  // values (sensitivity/smoothing/tighten) are pushed live via updateConfig so
+  // editing them doesn't spin up (and leak) a second interval/listener.
   protected onConfigUpdated(config: any, oldConfig: any) {
     const needsNewHandler = !this.gyroHandler || !oldConfig ||
       oldConfig.device_id !== config.device_id || oldConfig.gyroMode !== config.gyroMode;
     if (needsNewHandler) {
+      this.gyroHandler?.destroy();
       this.gyroHandler = new GyroHandler(this.serviceManager, config);
+    } else {
+      this.gyroHandler.updateConfig(config);
     }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.gyroHandler?.destroy();
   }
 
   protected updated() {
