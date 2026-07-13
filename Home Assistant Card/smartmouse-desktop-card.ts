@@ -75,9 +75,19 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   private handleKeyUp = (e: KeyboardEvent) => this.handleKey(e, "release");
   private blockScroll = (e: Event) => { if (this.isLocked) e.preventDefault(); };
 
+  // Clear any modifier that got stuck (e.g. a keyup lost because focus changed
+  // while it was held). Sent on both lock and unlock so a session never starts
+  // or ends with Ctrl/Shift/Alt/Win still down on the PC.
+  private releaseAllModifiers() {
+    for (let code = 0xe0; code <= 0xe7; code++) {
+      this.serviceManager.sendKey(code, "release");
+    }
+  }
+
   private handlePointerLockChange = () => {
     if (this.lockRoot.pointerLockElement === this) {
       this.isLocked = true;
+      this.releaseAllModifiers();
       this.overlayEl.textContent = "System Locked. Escape to Exit";
       this.style.background = "var(--dark, #232427)";
       this.style.cursor = "none";
@@ -89,6 +99,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
       document.addEventListener("pointermove", this.handlePointerMove, { capture: true });
     } else {
       this.isLocked = false;
+      this.releaseAllModifiers();
       this.overlayEl.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
       this.style.background = "var(--ha-card-background, #1e1f22)";
       this.style.cursor = "pointer";

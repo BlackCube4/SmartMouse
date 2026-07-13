@@ -1,13 +1,15 @@
 import { IServiceManager } from './types';
 
 // Shared "live" text capture used by both the HA input card and the firmware's
-// standalone page. Sends each change straight to the device by diffing the
-// field's value against a single anchor space and then resetting it.
+// standalone page. It lets the (invisible) field grow normally and, on each
+// change, sends only the difference by comparing against the previous value.
 //
-// The caller sets the input to type="url": on Android that disables autocorrect,
-// predictive text and the auto-space-after-punctuation that otherwise corrupt
-// the diffing — the same suppression a password field gives, but WITHOUT the
-// password-manager prompt or the password keyboard.
+// Crucially it does NOT reset the field after every keystroke — doing that
+// raced with the Android keyboard and swallowed most input. The field only
+// resets on blur / Enter / when emptied. The caller sets type="url", which on
+// Android disables autocorrect, predictions and the auto-space-after-
+// punctuation (the same suppression a password field gives) without the
+// password-manager prompt or password keyboard.
 export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
   const ANCHOR = ' ';
   const KEY_ENTER = 40;
@@ -26,12 +28,14 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
   input.spellcheck = false;
   input.value = ANCHOR;
 
+  // The leading anchor space is a permanent Backspace target and common prefix;
+  // real typed text follows it and is what the diff compares.
   let lastValue = ANCHOR;
 
   const caretEnd = () => {
     try { const n = input.value.length; input.setSelectionRange(n, n); } catch (e) {}
   };
-  const reset = () => { input.value = ANCHOR; lastValue = ANCHOR; caretEnd(); };
+  const resetToAnchor = () => { input.value = ANCHOR; lastValue = ANCHOR; caretEnd(); };
 
   input.addEventListener('focus', caretEnd);
   input.addEventListener('click', caretEnd);
@@ -40,35 +44,36 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
   input.addEventListener('input', () => {
     const val = input.value;
 
-    // Field shrank below the anchor → the anchor space was deleted = Backspace.
-    if (val.length < ANCHOR.length) {
+    // Anchor was deleted → treat as a Backspace and restore the anchor.
+    if (val.length === 0) {
       sm.sendKey(KEY_BACKSPACE, 'send');
-      reset();
+      resetToAnchor();
       return;
     }
 
-    const diff = val.length - lastValue.length;
-    if (diff > 0) {
-      const added = val.slice(lastValue.length);
-      if (added) sm.sendText(added);
-    } else if (diff < 0) {
-      for (let i = 0; i < Math.abs(diff); i++) sm.sendKey(KEY_BACKSPACE, 'send');
-    }
-    lastValue = val;
+    // Longest common prefix between old and new value; everything after it in
+    // the old value was deleted, everything after it in the new value is typed.
+    let p = 0;
+    const min = Math.min(lastValue.length, val.length);
+    while (p < min && lastValue.charCodeAt(p) === val.charCodeAt(p)) p++;
 
-    // Collapse back to the anchor so the field never accumulates. Deferred so
-    // the browser finishes processing this input event first.
-    setTimeout(reset, 0);
+    const removed = lastValue.length - p;
+    for (let i = 0; i < removed; i++) sm.sendKey(KEY_BACKSPACE, 'send');
+
+    const added = val.slice(p);
+    if (added) sm.sendText(added);
+
+    lastValue = val;
   });
 
-  input.addEventListener('blur', reset);
+  input.addEventListener('blur', resetToAnchor);
 
   input.addEventListener('keydown', (e) => {
     const code = NAV_KEYS[e.key];
     if (code) {
       e.preventDefault();
       sm.sendKey(code, 'send');
-      if (e.key === 'Enter') reset();
+      if (e.key === 'Enter') resetToAnchor();
     }
   });
 }
