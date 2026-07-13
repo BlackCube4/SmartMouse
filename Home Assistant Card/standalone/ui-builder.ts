@@ -2,13 +2,12 @@ import { GyroHandler } from '../gyro-handler';
 import { TouchpadHandler } from '../touchpad-handler';
 import { WsServiceManager } from '../ws-service-manager';
 import { SmartMouseConfig, MouseButton, KeyMode } from '../types';
+import { attachLiveInput } from '../live-input';
 
 // Plain-DOM UI for the firmware's standalone control page. Ported from the JS
 // that used to live inside index_html.h; it now constructs the SHARED
 // GyroHandler/TouchpadHandler, so gesture/sensor fixes reach this page too.
 export class UIBuilder {
-  private lastInputValue = ' ';
-
   // Offline text/unicode stand-ins for mdi: icons (no ha-icon available here).
   private iconMap: Record<string, string> = {
     'mdi:chevron-up': '▲',
@@ -274,23 +273,14 @@ export class UIBuilder {
     const liveWrapper = document.createElement('div');
     Object.assign(liveWrapper.style, { position: 'relative', width: '15%', margin: '0', padding: '0' });
 
-    const ANCHOR = ' ';
-    this.lastInputValue = ANCHOR;
     const liveInput = document.createElement('input');
-    // type=text (not password) so mobile shows a normal keyboard and password
-    // managers don't prompt; clearing still works via the anchor-space diffing.
     liveInput.type = 'text';
     liveInput.setAttribute('inputmode', 'text');
     liveInput.setAttribute('data-1p-ignore', 'true');
     liveInput.setAttribute('data-bwignore', 'true');
     liveInput.setAttribute('data-lpignore', 'true');
     liveInput.setAttribute('data-form-type', 'other');
-    liveInput.autocomplete = 'off';
-    liveInput.setAttribute('autocorrect', 'off');
-    liveInput.setAttribute('autocapitalize', 'off');
-    liveInput.spellcheck = false;
     liveInput.enterKeyHint = 'enter';
-    liveInput.value = ANCHOR;
 
     Object.assign(liveInput.style, {
       width: '100%', padding: '10px', borderRadius: '10px',
@@ -312,46 +302,8 @@ export class UIBuilder {
 
     liveWrapper.append(liveInput, liveInputOverlay);
 
-    const ensureCursorAtEnd = () => {
-      try { const len = liveInput.value.length; liveInput.setSelectionRange(len, len); } catch (e) {}
-    };
-    liveInput.addEventListener('focus', ensureCursorAtEnd);
-    liveInput.addEventListener('click', ensureCursorAtEnd);
-    liveInput.addEventListener('touchend', ensureCursorAtEnd);
-
-    liveInput.addEventListener('input', () => {
-      const val = liveInput.value;
-      const prev = this.lastInputValue;
-      const diff = val.length - prev.length;
-
-      if (val.length < ANCHOR.length) {
-        serviceManager.sendKey(42, 'send');
-        setTimeout(() => { liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd(); }, 0);
-        return;
-      }
-      if (diff > 0) {
-        const added = val.slice(prev.length);
-        if (added) serviceManager.sendText(added);
-      } else if (diff < 0) {
-        for (let i = 0; i < Math.abs(diff); i++) serviceManager.sendKey(42, 'send');
-      }
-      this.lastInputValue = val;
-      setTimeout(() => { liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd(); }, 0);
-    });
-
-    liveInput.addEventListener('blur', () => { liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; });
-    liveInput.addEventListener('keydown', (e) => {
-      const specialKeys = ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-        'Home', 'End', 'PageUp', 'PageDown', 'Delete', 'Tab'];
-      if (specialKeys.includes(e.key)) {
-        e.preventDefault();
-        const code = this.getHIDKeycodeFromEvent(e);
-        if (code) serviceManager.sendKey(code, 'send');
-        if (e.key === 'Enter') {
-          setTimeout(() => { liveInput.value = ANCHOR; this.lastInputValue = ANCHOR; ensureCursorAtEnd(); }, 0);
-        }
-      }
-    });
+    // Shared beforeinput-based capture (defeats Android autocorrect/auto-space).
+    attachLiveInput(liveInput, serviceManager);
 
     const textInput = document.createElement('input');
     textInput.type = 'text';

@@ -1,10 +1,13 @@
 import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
+import { query } from 'lit/decorators.js';
+import { attachLiveInput } from './live-input';
 
 const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device', inputType: 'Input Mode' });
 
 class SmartMouseInputCard extends SmartMouseCardBase {
-  private lastInputValue = " ";
+  @query('.live-input') private liveInputEl?: HTMLInputElement;
+  private attachedLiveInput?: HTMLInputElement;
 
   static getConfigForm() {
     return {
@@ -30,45 +33,15 @@ class SmartMouseInputCard extends SmartMouseCardBase {
     return { type: "custom:smartmouse-input-card", inputType: "buffered" };
   }
 
-  private handleLiveWrapperKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      this.serviceManager.sendKey(40, "send"); // Enter
-      const input = e.target as HTMLInputElement;
-      setTimeout(() => {
-        input.value = " ";
-        this.lastInputValue = " ";
-      }, 0);
+  // Wire the shared beforeinput-based capture onto the live input once per
+  // element (Lit recreates it when inputType toggles between live/buffered).
+  protected updated() {
+    const el = this.liveInputEl;
+    if (el && el !== this.attachedLiveInput && this.serviceManager) {
+      this.attachedLiveInput = el;
+      attachLiveInput(el, this.serviceManager);
     }
-  };
-
-  private handleLiveInput = (e: InputEvent) => {
-    const input = e.target as HTMLInputElement;
-    const val = input.value;
-    const diff = val.length - this.lastInputValue.length;
-
-    if (val.length < 1) {
-      this.serviceManager.sendKey(42, "send"); // Backspace
-      setTimeout(() => { input.value = " "; this.lastInputValue = " "; }, 0);
-      return;
-    }
-
-    if (diff > 0) {
-      const added = val.slice(this.lastInputValue.length);
-      if (added) this.serviceManager.sendText(added);
-    } else if (diff < 0) {
-      for (let i = 0; i < Math.abs(diff); i++) this.serviceManager.sendKey(42, "send");
-    }
-
-    this.lastInputValue = val;
-    setTimeout(() => { input.value = " "; this.lastInputValue = " "; }, 0);
-  };
-
-  private handleLiveBlur = (e: FocusEvent) => {
-    const input = e.target as HTMLInputElement;
-    input.value = " ";
-    this.lastInputValue = " ";
-  };
+  }
 
   private handleBufferedKeydown = (e: KeyboardEvent) => {
     e.stopPropagation();
@@ -87,7 +60,7 @@ class SmartMouseInputCard extends SmartMouseCardBase {
   protected render() {
     if (this._config.inputType === "live") {
       return html`
-        <div class="wrapper" @keydown=${this.handleLiveWrapperKeydown}>
+        <div class="wrapper">
           <input
             class="live-input"
             type="text"
@@ -97,13 +70,6 @@ class SmartMouseInputCard extends SmartMouseCardBase {
             data-bwignore="true"
             data-lpignore="true"
             data-form-type="other"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="none"
-            .spellcheck=${false}
-            .value=${" "}
-            @input=${this.handleLiveInput}
-            @blur=${this.handleLiveBlur}
           >
           <ha-icon icon="mdi:keyboard"></ha-icon>
         </div>
