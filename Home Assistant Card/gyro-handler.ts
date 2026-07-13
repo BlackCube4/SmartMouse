@@ -6,6 +6,16 @@ declare global {
   }
 }
 
+export interface GyroDebugInfo {
+  listening: boolean;
+  source: string;            // 'Modern API' | 'Legacy API' | 'none'
+  frequency: number;         // measured Hz
+  orientation: { x: number; y: number; z: number };
+  resolution: number;        // smallest non-zero step seen (deg); 0 = unknown yet
+  relativeActive: boolean;
+  absoluteActive: boolean;
+}
+
 export class GyroHandler {
   public gyroRelativeActive = false;
   public gyroAbsoluteActive = false;
@@ -38,6 +48,11 @@ export class GyroHandler {
   private lastReadingTime = performance.now();
   private readingCount = 0;
   private measuredFrequency = 0.0;
+
+  // Debug/monitoring
+  private _debugSource = 'none';
+  private _prevReadX: number | null = null;
+  private _minStep = Infinity;
   
   private GAIN!: number;
   private SMOOTH_WINDOW!: number;
@@ -355,6 +370,8 @@ export class GyroHandler {
     let gamma = Math.abs(sinp) >= 1 ? (Math.sign(sinp) * Math.PI / 2) * (180 / Math.PI) : Math.asin(sinp) * (180 / Math.PI);
 
     this.orientation = { x: alpha, y: beta, z: gamma };
+    this._debugSource = 'Modern API';
+    this.trackResolution();
     this.accumulateRelative();
     if (this.calibrating) this.updateCalibrationBounds();
     this.updateDebug("Modern API");
@@ -363,9 +380,39 @@ export class GyroHandler {
   private handleLegacyOrientation(event: any) {
     this.measureFrequency();
     this.orientation = { x: event.alpha || 0, y: event.beta || 0, z: event.gamma || 0 };
+    this._debugSource = 'Legacy API';
+    this.trackResolution();
     this.accumulateRelative();
     if (this.calibrating) this.updateCalibrationBounds();
     this.updateDebug("Legacy API", event);
+  }
+
+  // Track the smallest non-zero change in yaw between readings as an estimate
+  // of the sensor's angular resolution.
+  private trackResolution() {
+    if (this._prevReadX !== null) {
+      let d = Math.abs(this.orientation.x - this._prevReadX);
+      if (d > 180) d = 360 - d;
+      if (d > 1e-4 && d < this._minStep) this._minStep = d;
+    }
+    this._prevReadX = this.orientation.x;
+  }
+
+  // Start reading the sensor without activating cursor control (for the debug card).
+  public startMonitoring() {
+    this.startListening();
+  }
+
+  public getDebugInfo(): GyroDebugInfo {
+    return {
+      listening: this.isListening,
+      source: this._debugSource,
+      frequency: this.measuredFrequency,
+      orientation: { x: this.orientation.x, y: this.orientation.y, z: this.orientation.z },
+      resolution: this._minStep === Infinity ? 0 : this._minStep,
+      relativeActive: this.gyroRelativeActive,
+      absoluteActive: this.gyroAbsoluteActive,
+    };
   }
 
   private updateDebug(source: string, event: any = null) {
