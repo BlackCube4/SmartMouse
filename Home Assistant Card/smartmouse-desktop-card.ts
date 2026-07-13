@@ -1,5 +1,6 @@
 import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { MouseButton, KeyMode } from './types';
+import { keyboardEventToHid } from './hid-keycodes';
 import { html, css } from 'lit';
 import { query } from 'lit/decorators.js';
 
@@ -8,6 +9,7 @@ const DEFAULT_HEIGHT = 400;
 
 class SmartMouseDesktopCard extends SmartMouseCardBase {
   private isLocked = false;
+  private lockIntent = false;
 
   @query('.overlay') private overlayEl!: HTMLElement;
   @query('.decoy') private decoyInputEl!: HTMLInputElement;
@@ -47,12 +49,14 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
     document.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
   }
 
-  // In Home Assistant this card lives inside nested shadow roots, so
-  // document.pointerLockElement is retargeted and never equals `this`. The
-  // shadow root / document that actually contains us reports the real locked
-  // element, so query pointerLockElement there instead.
-  private get lockRoot(): DocumentOrShadowRoot {
-    return this.getRootNode() as unknown as DocumentOrShadowRoot;
+  // In Home Assistant this card lives inside nested shadow roots, where
+  // document.pointerLockElement is retargeted and identity checks against
+  // `this` are unreliable across browsers. Instead we track our own intent:
+  // once WE requested a lock, any active pointer lock means we hold it (only
+  // this card ever requests one on the dashboard).
+  private isPointerLocked(): boolean {
+    const root = this.getRootNode() as unknown as DocumentOrShadowRoot;
+    return document.pointerLockElement != null || root.pointerLockElement != null;
   }
 
   private handlePointerMove = (e: MouseEvent) => {
@@ -67,7 +71,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
     e.stopPropagation();
     if (mode === "press" && e.repeat) return;
 
-    const hidCode = this.getHIDKeycodeFromEvent(e);
+    const hidCode = keyboardEventToHid(e);
     if (hidCode) this.serviceManager.sendKey(hidCode, mode);
   };
 
@@ -85,7 +89,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   }
 
   private handlePointerLockChange = () => {
-    if (this.lockRoot.pointerLockElement === this) {
+    if (this.isPointerLocked() && this.lockIntent) {
       this.isLocked = true;
       this.releaseAllModifiers();
       this.overlayEl.textContent = "System Locked. Escape to Exit";
@@ -99,6 +103,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
       document.addEventListener("pointermove", this.handlePointerMove, { capture: true });
     } else {
       this.isLocked = false;
+      this.lockIntent = false;
       this.releaseAllModifiers();
       this.overlayEl.innerHTML = "Click to Lock System<br><small style='font-size: 0.7em; opacity: 0.7;'>Exit: Escape</small>";
       this.style.background = "var(--ha-card-background, #1e1f22)";
@@ -114,6 +119,7 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
 
   private handlePointerDown = (e: PointerEvent) => {
     if (!this.isLocked) {
+      this.lockIntent = true;
       this.requestPointerLock();
       e.preventDefault();
     } else {
@@ -140,15 +146,6 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
   };
 
   private handleContextMenu = (e: Event) => { if (this.isLocked) e.preventDefault(); };
-
-  private getHIDKeycodeFromEvent(e: KeyboardEvent): number | null {
-    const map: Record<string, number> = {
-      Enter: 40, Escape: 41, Backspace: 42, Tab: 43,
-      Space: 44, ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52
-    };
-    return map[e.code] || map[e.key] || null;
-    // Add full HID mapping as needed...
-  }
 
   protected render() {
     return html`

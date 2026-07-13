@@ -3,6 +3,7 @@ import { TouchpadHandler } from '../touchpad-handler';
 import { WsServiceManager } from '../ws-service-manager';
 import { SmartMouseConfig, MouseButton, KeyMode } from '../types';
 import { attachLiveInput } from '../live-input';
+import { keyboardEventToHid } from '../hid-keycodes';
 
 // Plain-DOM UI for the firmware's standalone control page. Ported from the JS
 // that used to live inside index_html.h; it now constructs the SHARED
@@ -83,30 +84,7 @@ export class UIBuilder {
 
       if (mode === 'press' && e.repeat) return;
 
-      let hidCode = this.getHIDKeycode(e.key, e.code) ?? 0;
-
-      const isDeadKey = e.key === 'Dead' && (e.code === 'Equal' || e.code === 'Backquote');
-      if (isDeadKey || e.key === '´' || e.key === '´´') hidCode = 227;
-
-      if (!hidCode && e.code.startsWith('Key')) hidCode = e.code.charCodeAt(3) - 65 + 4;
-      if (!hidCode && e.code.startsWith('Digit')) {
-        const d = parseInt(e.code.slice(-1));
-        hidCode = d === 0 ? 39 : d + 29;
-      }
-
-      const symbolMap: Record<string, number> = {
-        Space: 44, Minus: 45, Equal: 46, BracketLeft: 47, BracketRight: 48,
-        Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54,
-        Period: 55, Slash: 56, CapsLock: 57, Tab: 43, Escape: 41,
-      };
-      if (!hidCode) hidCode = symbolMap[e.code];
-
-      const modMap: Record<string, number> = {
-        ControlLeft: 224, ShiftLeft: 225, AltLeft: 226, MetaLeft: 227,
-        ControlRight: 228, ShiftRight: 229, AltRight: 230,
-      };
-      if (!hidCode) hidCode = modMap[e.code];
-
+      const hidCode = keyboardEventToHid(e);
       if (hidCode) serviceManager.sendKey(hidCode, mode);
     };
 
@@ -274,7 +252,6 @@ export class UIBuilder {
     Object.assign(liveWrapper.style, { position: 'relative', width: '15%', margin: '0', padding: '0' });
 
     const liveInput = document.createElement('input');
-    liveInput.type = 'url'; // disables Android autocorrect/predictions, no PW prompt
     liveInput.setAttribute('data-1p-ignore', 'true');
     liveInput.setAttribute('data-bwignore', 'true');
     liveInput.setAttribute('data-lpignore', 'true');
@@ -380,18 +357,5 @@ export class UIBuilder {
     root.appendChild(expandedArea);
     touchpadHandler.setupPad(pad);
     touchpadHandler.setupScrollArea(scrollArea);
-  }
-
-  private getHIDKeycodeFromEvent(e: { key: string }): number | null {
-    const map: Record<string, number> = {
-      Enter: 40, Escape: 41, Backspace: 42, Tab: 43,
-      Delete: 76, Home: 74, End: 77, PageUp: 75, PageDown: 78,
-      ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
-    };
-    return map[e.key] || null;
-  }
-
-  private getHIDKeycode(key: string, _code: string): number | null {
-    return this.getHIDKeycodeFromEvent({ key });
   }
 }
