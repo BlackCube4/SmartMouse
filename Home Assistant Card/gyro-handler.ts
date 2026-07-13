@@ -1,5 +1,4 @@
-import { ServiceManager } from './service-manager';
-import { SmartMouseConfig } from './types';
+import { IServiceManager, SmartMouseConfig } from './types';
 
 declare global {
   interface Window {
@@ -53,7 +52,7 @@ export class GyroHandler {
   private calibrateBtnElem?: HTMLElement;
   private originalCalibrateBtnIcon = "";
 
-  constructor(private serviceManager: ServiceManager, private config: SmartMouseConfig) {
+  constructor(private serviceManager: IServiceManager, private config: SmartMouseConfig) {
     this.updateConfig(config);
 
     this._loopInterval = window.setInterval(() => this.processLoop(), 10);

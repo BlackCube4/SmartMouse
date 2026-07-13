@@ -1,6 +1,6 @@
-import { HomeAssistant, SmartMouseConfig, MouseButton, KeyMode } from './types';
+import { HomeAssistant, SmartMouseConfig, MouseButton, KeyMode, IServiceManager } from './types';
 
-export class ServiceManager {
+export class ServiceManager implements IServiceManager {
   constructor(public hass?: HomeAssistant, public config: SmartMouseConfig = {} as SmartMouseConfig) {}
 
   private _log(action: string, data: any): void {

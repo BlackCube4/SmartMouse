@@ -1,5 +1,4 @@
-import { ServiceManager } from './service-manager';
-import { SmartMouseConfig } from './types';
+import { IServiceManager, SmartMouseConfig } from './types';
 
 export class TouchpadHandler {
   private floatDX = 0;
@@ -16,7 +15,7 @@ export class TouchpadHandler {
   private HOLD_TIME: number;
   private DEADZONE: number;
 
-  constructor(private serviceManager: ServiceManager, private config: SmartMouseConfig) {
+  constructor(private serviceManager: IServiceManager, private config: SmartMouseConfig) {
     this.TOUCH_GAIN = config.mouseSensitivity ?? 1.8;
     this.SCROLL_GAIN = config.scrollSensitivity ?? 3.0; 
     this.CLICK_DELAY = config.doubleClickTime ?? 250;
