@@ -14,6 +14,7 @@
 #include <ArduinoOTA.h>
 #include <ETH.h>
 #include "index_html.h"
+#include "smartmouse_bundle.h"
 #include "wifi_config_html.h"
 #include "test_sequence.h"
 
@@ -171,6 +172,11 @@ void handleRoot() {
   html.replace("%PCPWR_ENABLED%", pcPowerEnabled ? "true" : "false");
   html.replace("%AUTH_TOKEN%", secret_key);
   server.send(200, "text/html", html);
+}
+
+// Serve the shared control-page bundle (generated from the TS sources).
+void handleBundleJs() {
+  server.send_P(200, "application/javascript", SMARTMOUSE_BUNDLE_JS);
 }
 
 void handleWifiConfig() {
@@ -560,6 +566,7 @@ void setup() {
 
   // Initialize Web Server
   server.on("/", HTTP_GET, handleRoot); // Handle the root path to serve the HTML
+  server.on("/smartmouse.js", HTTP_GET, handleBundleJs); // Shared control-page bundle
   server.on("/wifi", HTTP_GET, handleWifiConfig);
   server.on("/save", HTTP_POST, handleSaveConfig);
   server.on("/scan", HTTP_GET, handleScan);
