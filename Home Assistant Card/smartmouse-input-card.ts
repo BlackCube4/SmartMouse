@@ -90,7 +90,9 @@ class SmartMouseInputCard extends SmartMouseCardBase {
         <div class="wrapper" @keydown=${this.handleLiveWrapperKeydown}>
           <input
             class="live-input"
-            type="password"
+            type="text"
+            inputmode="text"
+            enterkeyhint="enter"
             data-1p-ignore="true"
             data-bwignore="true"
             data-lpignore="true"

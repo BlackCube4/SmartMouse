@@ -224,6 +224,27 @@ export class TouchpadHandler {
     let lastY = 0;
     let scrolling = false;
     let accumulatedScroll = 0;
+    // Whether the firmware currently holds the two scroll fingers down.
+    let fingersDown = false;
+    // If the finger is held still mid-scroll, Windows lets the stale two-finger
+    // contact time out, and resuming gets misread as a cursor move. So after a
+    // short idle we cleanly lift the fingers; the next movement then starts a
+    // fresh scroll gesture (the firmware re-centers automatically).
+    let idleTimer: number | null = null;
+
+    const isTouchpadMode = () => this.config.scrollType !== 'wheel';
+
+    const liftFingers = () => {
+      if (fingersDown && isTouchpadMode()) {
+        this.serviceManager.sendTouchpadScroll(0, 0);
+      }
+      fingersDown = false;
+    };
+
+    const armIdleLift = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(liftFingers, 120);
+    };
 
     const startScroll = (e: TouchEvent) => {
       e.preventDefault();
@@ -247,6 +268,8 @@ export class TouchpadHandler {
           this.serviceManager.sendScrollWheel(-finalScroll);
         } else {
           this.serviceManager.sendTouchpadScroll(0, finalScroll);
+          fingersDown = true;
+          armIdleLift();
         }
         accumulatedScroll -= scrollAmount / this.SCROLL_GAIN;
       }
@@ -257,9 +280,8 @@ export class TouchpadHandler {
       e.preventDefault();
       scrolling = false;
       accumulatedScroll = 0;
-      if (this.config.scrollType !== 'wheel') {
-        this.serviceManager.sendTouchpadScroll(0, 0);
-      }
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      liftFingers();
     };
 
     scrollArea.addEventListener("touchstart", startScroll as EventListener, { passive: false });
