@@ -1,8 +1,7 @@
 # SmartMouse Binary WebSocket Protocol
 
-This binary protocol is implemented independently in three places. There is no
-code generation tying them together, so **when adding or changing an opcode,
-update all three, then update this table**:
+This binary protocol has three senders/receivers. **When adding or changing an
+opcode, update all three, then update this table**:
 
 1. Firmware (receiver/authority): `SmartMouse.ino` — `handleMouseCmd`,
    `handleKeyboardCmd`, `handleMediaCmd`, `handleTouchpadCmd`,
@@ -11,8 +10,10 @@ update all three, then update this table**:
 2. Python integration (sender, via Home Assistant services):
    `Home Assistant custom component/smartmouse/__init__.py` — the `OPCODE_*` constants
    near the top of the file.
-3. Standalone control page (sender, independent WebSocket client):
-   `index_html.h` — the `OP` object inside `class ServiceManager`.
+3. Web sender (raw WebSocket): `Home Assistant Card/ws-service-manager.ts` — the
+   `OP` object. This is the single source for the firmware's standalone page too:
+   the page loads the built bundle (`smartmouse_bundle.h`, generated from the TS
+   sources) rather than embedding its own copy.
 
 All packets are sent as raw binary WebSocket frames. Multi-byte integers are
 little-endian.

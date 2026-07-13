@@ -76,6 +76,8 @@ The Lovelace cards need to be compiled once:
 3. Copy the resulting `Home Assistant Card/dist/smartmouse-cards.js` into your Home Assistant config's `www` folder (e.g. `config/www/smartmouse-cards.js`).
 4. In Home Assistant: **Settings → Dashboards → ⋮ (top right) → Resources → Add Resource**, URL `/local/smartmouse-cards.js`, type **JavaScript Module**.
 
+> Note: `npm run build` also regenerates `Arduino IDE/SmartMouse/smartmouse_bundle.h` — the firmware's built-in control page (`http://<device>/`) is built from the same TypeScript sources as the cards, so a fix reaches both. That generated file is committed, so you only need to rebuild + reflash if you change the card/handler TypeScript.
+
 ### 11. Add cards to your dashboard
 Edit your dashboard, **Add Card**, search for "SmartMouse" — you'll see the Touchpad, Gyro, Desktop, Input, Modifier, and Container cards. Add the ones you want and set each card's "Target Device" to your SmartMouse device.
 
