@@ -2,12 +2,15 @@
 An ESP32-S3 based virtual HID (Keyboard/Mouse/Touchpad) that allows remote control via Home Assistant using high-speed WebSockets.
 
 ## Features
-- **Air Mouse:** Use your smartphone's gyroscope to control the PC cursor.
+- **Air Mouse:** Use your smartphone's gyroscope to control the PC cursor (relative or absolute), with Steam-style motion smoothing.
 - **Precision Touchpad:** Supports Windows multi-finger gestures and high-resolution scrolling.
 - **Media & Keyboard Control:** Dedicated services for media keys, HID keycodes, and raw text injection.
+- **PC Power Control (optional):** Turn the PC on/off/sleep and read its power state, via the motherboard front-panel headers.
+- **Wired or wireless:** WiFi by default, with optional auto-detected W5500 Ethernet for stability.
+- **Multi-device:** Run several SmartMice in one house, each with a configurable name.
 - **Low Latency:** Optimized for sub-ms response times via `WiFi.setSleep(false)` and 240MHz CPU scaling.
 - **Secure:** Simple shared-secret handshake authentication.
-- **Telemetry:** Real-time monitoring of ESP32 internal temperature and WiFi signal strength.
+- **Telemetry:** Real-time monitoring of ESP32 internal temperature, WiFi signal strength, and connection type.
 
 ## Getting Started From Scratch
 
@@ -112,52 +115,16 @@ Leave it unwired on devices that should stay on WiFi — the boot-time probe fai
 ### Installation
 See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy this repo's `Home Assistant custom component/smartmouse` folder into your Home Assistant config's `custom_components` directory, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
 
-### Gyro / UI Configuration
-When using the custom card, you can tune the following parameters in the card's YAML:
+### Card Configuration
+Each card is configured through Home Assistant's **visual editor** (click the card → Edit) — there's no need to hand-write YAML. Every card has a **Target Device** field; the touchpad and gyro cards add their own tuning options, e.g.:
 
-```yaml
-type: custom:smartmouse-card
-device_id: <your_device_id>     # The ID of your device
-mouseSensitivity: 1.8           # Multiplier for touchpad cursor speed
-scrollSensitivity: 3            # Multiplier for touchpad scroll speed
-gyroSensitivity: 8              # Multiplier for Air Mouse movement
-smoothing: 0.15                 # Low-pass filter (0.0-1.0). Higher = smoother, more lag
-suppressionOffset: 20           # Ms to ignore gyro after a click (prevents jitter)
-doubleClickTime: 250            # Max ms between taps for double-click
-holdTime: 400                   # Ms to hold before triggering Right Click
-movementDeadzone: 3             # Deadzone in px before a tap becomes a move/drag
-debug: true                     # Shows real-time sensor data and frequency
-```
+- **Touchpad card:** touchpad sensitivity, scroll sensitivity, scroll type (precision vs. mouse-wheel), invert scroll.
+- **Gyro card:** mode (relative air-mouse vs. absolute laser-pointer), sensitivity, smoothing, jitter suppression (deg/s), custom button text/icon, button height.
 
-## Protocol Opcodes (Binary WebSocket)
-| Opcode | Function | Payload |
-| :--- | :--- | :--- |
-| `0x01` | Relative Mouse | `int16 dx, int16 dy` |
-| `0x02` | Absolute Mouse | `int16 x, int16 y` |
-| `0x03` | Mouse Button Down | `uint8 button_mask` |
-| `0x04` | Mouse Button Up | `uint8 button_mask` |
-| `0x05` | Mouse Click | `uint8 button_mask` |
-| `0x11` | Keyboard Key Down | `uint8 keycode` |
-| `0x12` | Keyboard Key Up | `uint8 keycode` |
-| `0x13` | Keyboard Key Send | `uint8 keycode` |
-| `0x21` | Media Key Down | `int16 usage_code` |
-| `0x22` | Media Key Up | (None) |
-| `0x23` | Media Key Send | `int16 usage_code` |
-| `0x31` | Text Injection | `string (utf8)` |
-| `0x41` | Mouse Scroll | `int8 steps` |
-| `0x42` | Touchpad Scroll | `int16 dx, int16 dy` |
-| `0x43` | Touchpad Zoom | `int16 delta` |
-| `0x44` | Custom Multi-Finger | `uint8 mask, 5x [uint16 x, uint16 y]` |
-| `0x4F` | Lift Fingers | (None) - Releases all touchpad contacts |
-| `0xA0` | PC Power Control | `uint8 0x01=Toggle, 0x02=Hard Off, 0x03=Power On, 0x04=Power Off` |
-| `0xF0` | Telemetry | `float temp, int8 rssi, uint8 power_save` |
-| `0xFE` | System Reset | (None) - Triggers Hardware Restart |
-| `0xFF` | Auth Handshake| `string password` |
+Defaults are sensible, so an unconfigured card works out of the box; adjust in the editor to taste.
 
-### Custom Multi-Finger (0x44) Detail
-The payload for `0x44` expects exactly 21 bytes following the opcode. 
-1. `uint8` : Active mask. Bit 0 for Finger 1, Bit 1 for Finger 2, etc. (1=active, 0=inactive).
-2. `5x [uint16 x, uint16 y]`: 5 blocks of X and Y positions (0-4095), Little-Endian.
+## Protocol
+The binary WebSocket protocol (opcodes, payloads, telemetry format) is documented in **[PROTOCOL.md](PROTOCOL.md)** — a single reference shared by the firmware, the Python integration, and the web bundle. See that file rather than duplicating the table here.
 
 ## Home Assistant Services
 The `smartmouse` domain provides services for automation:
@@ -172,3 +139,25 @@ The device operates in two states:
 2. **Power Saving:** 80MHz CPU, WiFi Modem Sleep Enabled (~80mA). Triggered after 1 minute of inactivity.
 
 **Thermal Throttle:** If the internal die temperature exceeds 80°C, the device will force itself into Power Saving mode until it cools below 60°C.
+
+## Repository Layout (for contributors)
+```
+Arduino IDE/SmartMouse/     ESP32-S3 firmware (Arduino sketch)
+  SmartMouse.ino              main firmware
+  USBHID*.cpp/.h              USB HID mouse/keyboard/touchpad drivers
+  index_html.h               the built-in control page (CSS + skeleton; loads /smartmouse.js)
+  smartmouse_bundle.h        GENERATED — do not hand-edit (see below)
+Home Assistant Card/        Lovelace cards + the standalone-page bundle (one TypeScript project)
+  gyro-handler.ts,           shared, transport-agnostic gesture/sensor logic
+  touchpad-handler.ts,
+  live-input.ts
+  service-manager.ts         HA transport (hass.callService)
+  ws-service-manager.ts      WebSocket transport (for the standalone page)
+  smartmouse-*-card.ts       the Lit cards for Home Assistant
+  standalone/                the firmware page's UI (plain DOM), built into the bundle
+Home Assistant custom component/smartmouse/   the Python HA integration
+scripts/embed-bundle.mjs     writes the built standalone bundle into smartmouse_bundle.h
+PROTOCOL.md                  the binary opcode reference (single source of truth)
+```
+
+**One source of truth.** The gesture/sensor logic (gyro smoothing, touchpad, live text input) lives once in TypeScript and is shared by both the Home Assistant cards *and* the firmware's built-in web page. `npm run build` in `Home Assistant Card/` produces two bundles — `dist/smartmouse-cards.js` (for HA) and the standalone page's JS, which `scripts/embed-bundle.mjs` writes into `Arduino IDE/SmartMouse/smartmouse_bundle.h` (served by the ESP at `/smartmouse.js`). So a fix to a handler reaches both surfaces; after changing any TypeScript, rebuild and reflash. `smartmouse_bundle.h` is generated — never edit it by hand.
