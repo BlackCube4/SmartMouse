@@ -65,7 +65,7 @@ class SmartMouseModifierCard extends SmartMouseCardBase {
       display: flex; align-items: center; justify-content: center;
       padding: 12px 4px; border-radius: var(--ha-card-border-radius, 8px);
       background: var(--dark, #2b2c2f); color: var(--primary-text-color, #fff);
-      border: none; cursor: pointer; font-size: 14px; font-weight: 600; touch-action: none;
+      border: none; cursor: pointer; font-size: 14px; font-weight: 600; touch-action: manipulation;
     }
     button.active { background: var(--primary-color, #666); }
   `;

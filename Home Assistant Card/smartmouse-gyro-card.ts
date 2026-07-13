@@ -135,8 +135,9 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
     :host { display: flex; flex-direction: column; gap: 8px; }
     .gyro-btn {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 72px;
       padding: 12px; border-radius: var(--ha-card-border-radius, 8px); background: var(--dark, #2b2c2f);
-      color: var(--primary-text-color, #fff); border: none; cursor: pointer; touch-action: none;
+      color: var(--primary-text-color, #fff); border: none; cursor: pointer; touch-action: manipulation;
     }
     .debug {
       padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px;
