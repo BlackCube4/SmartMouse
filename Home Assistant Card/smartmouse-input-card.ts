@@ -1,13 +1,14 @@
 import { SmartMouseCardBase, computeLabelFactory } from './base-card';
 import { html, css } from 'lit';
 import { query } from 'lit/decorators.js';
-import { attachLiveInput } from './live-input';
+import { attachLiveInput, attachPredictiveInput } from './live-input';
 
 const COMPUTE_LABEL = computeLabelFactory({ device_id: 'Target Device', inputType: 'Input Mode' });
 
 class SmartMouseInputCard extends SmartMouseCardBase {
   @query('.live-input') private liveInputEl?: HTMLInputElement;
-  private attachedLiveInput?: HTMLInputElement;
+  @query('.predictive-input') private predictiveInputEl?: HTMLInputElement;
+  private attachedInput?: HTMLInputElement;
 
   static getConfigForm() {
     return {
@@ -20,6 +21,7 @@ class SmartMouseInputCard extends SmartMouseCardBase {
               options: [
                 { value: 'buffered', label: 'Buffered (Press Enter to send)' },
                 { value: 'live', label: 'Live (Sends as you type)' },
+                { value: 'predictive', label: 'Predictive (keeps autocorrect/prediction)' },
               ],
             },
           },
@@ -33,13 +35,14 @@ class SmartMouseInputCard extends SmartMouseCardBase {
     return { type: "custom:smartmouse-input-card", inputType: "buffered" };
   }
 
-  // Wire the shared beforeinput-based capture onto the live input once per
-  // element (Lit recreates it when inputType toggles between live/buffered).
+  // Wire the shared capture onto whichever input element is currently
+  // rendered, once per element (Lit recreates it when inputType changes).
   protected updated() {
-    const el = this.liveInputEl;
-    if (el && el !== this.attachedLiveInput && this.serviceManager) {
-      this.attachedLiveInput = el;
-      attachLiveInput(el, this.serviceManager);
+    const el = this.liveInputEl || this.predictiveInputEl;
+    if (el && el !== this.attachedInput && this.serviceManager) {
+      this.attachedInput = el;
+      if (this.liveInputEl) attachLiveInput(el, this.serviceManager);
+      else attachPredictiveInput(el, this.serviceManager);
     }
   }
 
@@ -74,6 +77,15 @@ class SmartMouseInputCard extends SmartMouseCardBase {
       `;
     }
 
+    if (this._config.inputType === "predictive") {
+      return html`
+        <div class="wrapper">
+          <input class="predictive-input" type="text">
+          <ha-icon icon="mdi:keyboard"></ha-icon>
+        </div>
+      `;
+    }
+
     return html`
       <input
         class="buffered-input"
@@ -87,7 +99,7 @@ class SmartMouseInputCard extends SmartMouseCardBase {
   static styles = css`
     :host { display: flex; gap: 8px; }
     .wrapper { position: relative; width: 100%; margin: 0; padding: 0; }
-    .live-input {
+    .live-input, .predictive-input {
       width: 100%; padding: 12px; border-radius: var(--ha-card-border-radius, 8px); box-sizing: border-box;
       background: var(--dark, #2a2b2e); border: 0px;
       color: transparent; font-size: 14px; text-align: center;
