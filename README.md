@@ -110,18 +110,29 @@ For a device sitting near a LAN port, wiring up a W5500 module gets you a wired 
 
 Leave it unwired on devices that should stay on WiFi — the boot-time probe fails fast and harmlessly if nothing responds.
 
+> **Power note:** the W5500 draws noticeably more current than WiFi-only operation, and small breakout boards (e.g. "Super Mini" style) often carry a weak onboard 3.3V regulator. If a wired device becomes unresponsive under load and only recovers after a power cycle, try powering the W5500 from a separate, adequately-rated 3.3V source (e.g. a small buck converter) rather than the ESP32's own 3.3V pin, before suspecting a firmware/software cause.
+
 ## Home Assistant Configuration
 
 ### Installation
 See [Getting Started From Scratch](#9-install-the-home-assistant-integration) above for the full walkthrough. In short: copy this repo's `Home Assistant custom component/smartmouse` folder into your Home Assistant config's `custom_components` directory, restart Home Assistant, then add the integration via **Settings → Devices & Services**.
 
 ### Card Configuration
-Each card is configured through Home Assistant's **visual editor** (click the card → Edit) — there's no need to hand-write YAML. Every card has a **Target Device** field; the touchpad and gyro cards add their own tuning options, e.g.:
+Each card is configured through Home Assistant's **visual editor** (click the card → Edit) — there's no need to hand-write YAML. Every card has a **Target Device** field; most cards add their own tuning options, e.g.:
 
 - **Touchpad card:** touchpad sensitivity, scroll sensitivity, scroll type (precision vs. mouse-wheel), invert scroll.
-- **Gyro card:** mode (relative air-mouse vs. absolute laser-pointer), sensitivity, smoothing, jitter suppression (deg/s), custom button text/icon, button height.
+- **Gyro card:** mode (relative air-mouse vs. absolute laser-pointer), sensitivity, smoothing, jitter suppression (deg/s), custom button text/icon, hide text/hide icon (button shrinks to fit whichever is left), button height.
+- **Input card:** input mode — *Buffered* (type, then press Enter to send), *Live* (sends as you type, reliable but shows a password-style keyboard), or *Predictive* (a normal text field that keeps your phone's autocorrect/word prediction; edits and cursor moves are replayed on the PC).
+- **Debug card:** no options — drop it on a dashboard to see live gyro sample rate, resolution, and a rough quality verdict, useful when tuning gyro sensitivity/smoothing.
 
 Defaults are sensible, so an unconfigured card works out of the box; adjust in the editor to taste.
+
+## Standalone Control Page
+Every device also serves its own control page directly at `http://<device>/` (or `http://<name>.local/`) — no Home Assistant required. It mirrors the Lovelace cards (touchpad, gyro, keyboard, media keys) and is handy for a quick control from a phone browser, or as a fallback if Home Assistant is down.
+
+- Tapping the device name in the top-left (next to the connection dot) restarts the ESP, after a confirmation prompt.
+- Connection dot colors: 🟢 green = connected, 🟡 yellow = connecting/reconnecting, 🔴 red = disconnected.
+- On mobile it opens straight into the full control layout — no expand/collapse step.
 
 ## Protocol
 The binary WebSocket protocol (opcodes, payloads, telemetry format) is documented in **[PROTOCOL.md](PROTOCOL.md)** — a single reference shared by the firmware, the Python integration, and the web bundle. See that file rather than duplicating the table here.
