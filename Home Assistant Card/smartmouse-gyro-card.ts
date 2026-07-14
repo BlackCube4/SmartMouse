@@ -9,6 +9,7 @@ const COMPUTE_LABEL = computeLabelFactory({
   buttonText: 'Custom Button Text (Optional)',
   buttonIcon: 'Custom Button Icon (Optional)',
   hideText: 'Hide Button Text',
+  hideIcon: 'Hide Button Icon',
   gyroSensitivity: 'Sensitivity (Default: 8)',
   smoothing: 'Smoothing (0 = off, 1 = max)',
   gyroTightenThreshold: 'Jitter Suppression (deg/s, Default: 3)',
@@ -41,6 +42,7 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
         { name: 'buttonText', selector: { text: {} } },
         { name: 'buttonIcon', selector: { icon: {} } },
         { name: 'hideText', selector: { boolean: {} } },
+        { name: 'hideIcon', selector: { boolean: {} } },
         { name: 'gyroSensitivity', selector: { number: { mode: 'box', min: 1, max: 30, step: 0.5 } } },
         { name: 'smoothing', selector: { number: { mode: 'slider', min: 0, max: 1, step: 0.05 } } },
         { name: 'gyroTightenThreshold', selector: { number: { mode: 'box', min: 0, max: 20, step: 0.5, unit_of_measurement: 'deg/s' } } },
@@ -93,10 +95,14 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
   // calibration (innerHTML/style) - mixing the two would corrupt Lit's
   // internal tracking of that node's children.
   private syncButtonContent(btn: HTMLElement, isAbsolute: boolean) {
-    const text = this._config.hideText ? "" : (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative"));
+    const showText = !this._config.hideText;
+    const showIcon = !this._config.hideIcon;
+    const text = showText ? (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative")) : "";
     const icon = this._config.buttonIcon || (isAbsolute ? "mdi:bullseye" : "mdi:ray-start-arrow");
-    const iconMargin = text ? "4px" : "0px";
-    btn.innerHTML = `<ha-icon icon="${icon}" style="margin-bottom: ${iconMargin}; pointer-events: none;"></ha-icon>${text}`;
+    const iconMargin = showText && showIcon ? "4px" : "0px";
+    const iconHtml = showIcon ? `<ha-icon icon="${icon}" style="margin-bottom: ${iconMargin}; pointer-events: none;"></ha-icon>` : "";
+    // If both are hidden, fall back to text so the button isn't empty.
+    btn.innerHTML = showIcon || showText ? `${iconHtml}${text}` : (this._config.buttonText || (isAbsolute ? "Absolute" : "Relative"));
   }
 
   private cancelPress = () => {
@@ -104,6 +110,13 @@ class SmartMouseGyroCard extends SmartMouseCardBase {
   };
 
   private handleAbsPointerDown = (e: Event) => {
+    // Calibration is already running and self-completes via its own timer;
+    // there's nothing for a press to do here. Mobile browsers can throttle
+    // background timers/sensor delivery while a touch is actively held down
+    // (an input-latency optimization outside our control), so avoid adding
+    // any extra work - starting a timer, preventDefault - during that window,
+    // in case it's contributing to the progress appearing to pause.
+    if (this.gyroHandler.calibrating) return;
     e.preventDefault();
     this.isLongPress = false;
     this.pressTimer = window.setTimeout(() => {

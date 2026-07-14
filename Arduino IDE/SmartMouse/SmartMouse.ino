@@ -230,27 +230,39 @@ void handleSaveConfig() {
 // ---------------------------------------
 // 0x01-0x05 → MOUSE
 // ---------------------------------------
-void handleMouseCmd(uint8_t cmd, uint8_t* payload) {
+// Every handler below re-checks `length` against what its opcode needs before
+// touching payload[1..]. The WebSocket library hands us exactly `length` valid
+// bytes - reading past that is an out-of-bounds heap read, which is silent
+// most of the time but can crash unpredictably (and only on the occasional
+// truncated/reordered packet, e.g. under WiFi packet loss) - a classic
+// "works fine, then randomly needs a reboot" bug. Malformed packets are just
+// dropped.
+void handleMouseCmd(uint8_t cmd, uint8_t* payload, size_t length) {
   switch (cmd) {
     case 0x01: { // Relative move: opcode | int16 dx | int16 dy
+      if (length < 5) return;
       int16_t dx = payload[1] | (payload[2] << 8);
       int16_t dy = payload[3] | (payload[4] << 8);
       mouse.move(dx, dy);
       break;
     }
     case 0x02: { // Absolute move: opcode | int16 x | int16 y
+      if (length < 5) return;
       int16_t x = payload[1] | (payload[2] << 8);
       int16_t y = payload[3] | (payload[4] << 8);
       mouse.moveTo(x, y);
       break;
     }
     case 0x03:
+      if (length < 2) return;
       mouse.press(payload[1]);
       break;
     case 0x04:
+      if (length < 2) return;
       mouse.release(payload[1]);
       break;
     case 0x05:
+      if (length < 2) return;
       mouse.click(payload[1]);
       break;
   }
@@ -259,19 +271,26 @@ void handleMouseCmd(uint8_t cmd, uint8_t* payload) {
 // ---------------------------------------
 // 0x11-0x13, 0x31 → KEYBOARD
 // ---------------------------------------
-void handleKeyboardCmd(uint8_t cmd, uint8_t* payload) {
+void handleKeyboardCmd(uint8_t cmd, uint8_t* payload, size_t length) {
   switch (cmd) {
     case 0x11: // Key down: opcode | uint8 keycode
+      if (length < 2) return;
       keyboard.pressRaw(payload[1]);
       break;
     case 0x12: // Key up: opcode | uint8 keycode
+      if (length < 2) return;
       keyboard.releaseRaw(payload[1]);
       break;
     case 0x13: // Key send: opcode | uint8 keycode
+      if (length < 2) return;
       keyboard.pressRaw(payload[1]);
       keyboard.releaseRaw(payload[1]);
       break;
-    case 0x31: // Text send: opcode | raw utf8 text...
+    case 0x31: // Text send: opcode | raw utf8 text... | \0
+      // keyboard.write() scans for a NUL terminator with no length bound of
+      // its own, so refuse to call it unless we can see that terminator
+      // ourselves within the bytes the WebSocket layer actually gave us.
+      if (length < 2 || payload[length - 1] != 0) return;
       keyboard.write((const char*)&payload[1]);
       break;
   }
@@ -280,9 +299,10 @@ void handleKeyboardCmd(uint8_t cmd, uint8_t* payload) {
 // ---------------------------------------
 // 0x21-0x23 → MEDIA KEYS
 // ---------------------------------------
-void handleMediaCmd(uint8_t cmd, uint8_t* payload) {
+void handleMediaCmd(uint8_t cmd, uint8_t* payload, size_t length) {
   switch (cmd) {
     case 0x21: { // Down: opcode | uint16 consumer_code
+      if (length < 3) return;
       uint16_t code = payload[1] | (payload[2] << 8);
       media.press(code);
       break;
@@ -291,6 +311,7 @@ void handleMediaCmd(uint8_t cmd, uint8_t* payload) {
       media.release();
       break;
     case 0x23: { // Send: opcode | uint16 consumer_code
+      if (length < 3) return;
       uint16_t code = payload[1] | (payload[2] << 8);
       media.press(code);
       media.release();
@@ -302,25 +323,29 @@ void handleMediaCmd(uint8_t cmd, uint8_t* payload) {
 // ---------------------------------------
 // 0x41-0x44, 0x4F → TOUCHPAD / SCROLL
 // ---------------------------------------
-void handleTouchpadCmd(uint8_t cmd, uint8_t* payload) {
+void handleTouchpadCmd(uint8_t cmd, uint8_t* payload, size_t length) {
   switch (cmd) {
     case 0x41: { // Low-res scroll: opcode | int8 steps
+      if (length < 2) return;
       int8_t steps = payload[1];
       mouse.move(0, 0, steps);
       break;
     }
     case 0x42: { // High-res scroll: opcode | int16 dx | int16 dy
+      if (length < 5) return;
       int16_t dx = payload[1] | (payload[2] << 8);
       int16_t dy = payload[3] | (payload[4] << 8);
       touchpad.scroll(dx, dy);
       break;
     }
     case 0x43: { // High-res zoom: opcode | int16 steps
+      if (length < 3) return;
       int16_t steps = payload[1] | (payload[2] << 8);
       touchpad.zoom(steps);
       break;
     }
     case 0x44: { // 5-finger gesture: opcode | mask (1) | [x (2) | y (2)] * 5
+      if (length < 22) return;
       USBHIDTouchpad::FingerData fingers[5];
       uint8_t mask = payload[1];
       for (int i = 0; i < 5; i++) {
@@ -341,8 +366,9 @@ void handleTouchpadCmd(uint8_t cmd, uint8_t* payload) {
 // ---------------------------------------
 // 0xA0 → PC POWER CONTROL
 // ---------------------------------------
-void handlePCPowerCmd(uint8_t* payload) {
+void handlePCPowerCmd(uint8_t* payload, size_t length) {
   if (!pcPowerEnabled) return;
+  if (length < 2) return;
   uint8_t pcCmd = payload[1];
   if (pcCmd == 0x01) { // Toggle
     pulsePowerSwitch(200); // Standard single press
@@ -398,6 +424,13 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
 
   // Handle Authentication (Opcode 0xFF)
   if (cmd == 0xFF) {
+    // Same out-of-bounds risk as the text_send handler: don't call strcmp on
+    // payload[1..] unless a NUL terminator is actually present within the
+    // bytes we received.
+    if (length < 2 || payload[length - 1] != 0) {
+      wsServer.disconnect(num);
+      return;
+    }
     if (strcmp((const char*)&payload[1], secret_key) == 0) {
       if (num < MAX_WS_CLIENTS) client_authenticated[num] = true;
       Serial.printf("Client %u Authenticated.\n", num);
@@ -411,23 +444,23 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t lengt
 
   switch (cmd) {
     case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
-      handleMouseCmd(cmd, payload);
+      handleMouseCmd(cmd, payload, length);
       break;
 
     case 0x11: case 0x12: case 0x13: case 0x31:
-      handleKeyboardCmd(cmd, payload);
+      handleKeyboardCmd(cmd, payload, length);
       break;
 
     case 0x21: case 0x22: case 0x23:
-      handleMediaCmd(cmd, payload);
+      handleMediaCmd(cmd, payload, length);
       break;
 
     case 0x41: case 0x42: case 0x43: case 0x44: case 0x4F:
-      handleTouchpadCmd(cmd, payload);
+      handleTouchpadCmd(cmd, payload, length);
       break;
 
     case 0xA0: // PC POWER CONTROL
-      handlePCPowerCmd(payload);
+      handlePCPowerCmd(payload, length);
       break;
 
     case 0xFE: // Reboot ESP32-S3

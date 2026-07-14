@@ -499,8 +499,20 @@ export class GyroHandler {
     
     if (this.calibrateBtnElem) {
       this.calibrateBtnElem.style.background = "var(--success-color, #2ecc71)";
-      this.calibrateBtnElem.innerHTML = `<ha-icon icon="mdi:border-radius" style="margin-bottom: 4px; pointer-events: none;"></ha-icon>Calibrated!`;
-      
+      // Match whatever line-count the button is configured to show normally
+      // (icon+text / icon-only / text-only), so the finish message doesn't
+      // resize the button relative to its resting state.
+      const cfg = this.config as any;
+      const showText = !cfg.hideText;
+      const showIcon = !cfg.hideIcon;
+      if (showIcon && showText) {
+        this.calibrateBtnElem.innerHTML = `<ha-icon icon="mdi:border-radius" style="margin-bottom: 4px; pointer-events: none;"></ha-icon>Calibrated!`;
+      } else if (showIcon) {
+        this.calibrateBtnElem.innerHTML = `<ha-icon icon="mdi:border-radius" style="pointer-events: none;"></ha-icon>`;
+      } else {
+        this.calibrateBtnElem.innerHTML = "Calibrated!";
+      }
+
       setTimeout(() => {
           if (this.calibrateBtnElem) {
               this.calibrateBtnElem.innerHTML = this.originalCalibrateBtnIcon || "Absolute";
