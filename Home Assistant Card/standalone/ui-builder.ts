@@ -11,8 +11,6 @@ import { keyboardEventToHid } from '../hid-keycodes';
 export class UIBuilder {
   // Offline text/unicode stand-ins for mdi: icons (no ha-icon available here).
   private iconMap: Record<string, string> = {
-    'mdi:chevron-up': '▲',
-    'mdi:chevron-down': '▼',
     'mdi:ray-start-arrow': '↝',
     'mdi:bullseye': '☉',
     'mdi:border-radius': '⛶',
@@ -71,9 +69,6 @@ export class UIBuilder {
     decoyInput.type = 'text';
     Object.assign(decoyInput.style, { position: 'absolute', opacity: '0', pointerEvents: 'none', zIndex: '-1' });
     root.appendChild(decoyInput);
-
-    const statusDot = document.getElementById('ws-status-dot');
-    if (statusDot) statusDot.addEventListener('mousedown', (e) => { e.stopPropagation(); serviceManager.sendReset(); });
 
     const handleKey = (e: KeyboardEvent, mode: KeyMode) => {
       if (!isLocked) return;
@@ -157,18 +152,6 @@ export class UIBuilder {
   }
 
   setupMobileLayout(root: HTMLElement, serviceManager: WsServiceManager, touchpadHandler: TouchpadHandler, gyroHandler: GyroHandler) {
-    let expanded = false;
-    const updateLayout = () => {
-      expandedArea.style.display = expanded ? 'flex' : 'none';
-      expandBtn.innerHTML = '';
-      const icon = document.createElement('span');
-      icon.className = 'icon-placeholder';
-      icon.textContent = expanded ? this.iconMap['mdi:chevron-down'] : this.iconMap['mdi:chevron-up'];
-      icon.style.pointerEvents = 'none';
-      icon.style.fontSize = '14px';
-      expandBtn.appendChild(icon);
-    };
-
     Object.assign(root.style, { display: 'flex', flexDirection: 'column' });
 
     const topArea = document.createElement('div');
@@ -199,10 +182,9 @@ export class UIBuilder {
 
     const buttonRow1 = document.createElement('div');
     Object.assign(buttonRow1.style, {
-      display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px', marginTop: '10px',
+      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop: '10px',
     });
 
-    const expandBtn = this.createButton('mdi:chevron-up', null, '14px');
     const gyroRelBtn = this.createButton('mdi:ray-start-arrow', () => {
       gyroHandler.toggleGyroRelative().then(() => {
         const on = gyroHandler.gyroRelativeActive;
@@ -210,22 +192,43 @@ export class UIBuilder {
         gyroRelBtn.style.color = on ? '#fff' : 'var(--text-color)';
       });
     });
-    const gyroAbsBtn = this.createButton('mdi:bullseye', () => {
-      gyroHandler.toggleGyroAbsolute().then(() => {
-        const on = gyroHandler.gyroAbsoluteActive;
-        gyroAbsBtn.style.background = on ? 'var(--primary)' : 'var(--btn-dark)';
-        gyroAbsBtn.style.color = on ? '#fff' : 'var(--text-color)';
-      });
+
+    // Combined absolute-mode toggle + calibrate button, matching the HA gyro
+    // card exactly: a tap calibrates (first time) or toggles absolute mode
+    // (once calibrated); holding for 600ms forces a recalibration.
+    const gyroAbsBtn = this.createButton('mdi:bullseye', null);
+    let absPressTimer: number | null = null;
+    let absLongPress = false;
+    const cancelAbsPress = () => { if (absPressTimer) { clearTimeout(absPressTimer); absPressTimer = null; } };
+    gyroAbsBtn.addEventListener('pointerdown', (e) => {
+      if (gyroHandler.calibrating) return;
+      e.preventDefault();
+      absLongPress = false;
+      absPressTimer = window.setTimeout(() => {
+        absLongPress = true;
+        if (!gyroHandler.calibrating) {
+          gyroHandler.startCalibration(gyroAbsBtn);
+          navigator.vibrate?.([50]);
+        }
+      }, 600);
     });
-    const calibrateBtn = this.createButton('mdi:border-radius', () => {
-      if (gyroHandler.calibrating) gyroHandler.finishCalibration();
-      else if (gyroHandler.gyroAbsoluteActive) gyroHandler.recenter();
-      else gyroHandler.startCalibration(calibrateBtn);
+    gyroAbsBtn.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      cancelAbsPress();
+      if (absLongPress || gyroHandler.calibrating) return;
+      if (!gyroHandler.isCalibrated) {
+        gyroHandler.startCalibration(gyroAbsBtn);
+      } else {
+        gyroHandler.toggleGyroAbsolute().then(() => {
+          gyroAbsBtn.style.background = gyroHandler.gyroAbsoluteActive ? 'var(--primary)' : 'var(--btn-dark)';
+        });
+      }
     });
+    gyroAbsBtn.addEventListener('pointercancel', cancelAbsPress);
+    gyroAbsBtn.addEventListener('pointerleave', cancelAbsPress);
+
     const volDownBtn = this.createButton('mdi:volume-minus');
     const volUpBtn = this.createButton('mdi:volume-plus');
-
-    if (gyroHandler.isCalibrated) calibrateBtn.style.background = 'var(--btn-dark)';
 
     const volHandler = (btn: HTMLButtonElement, code: number) => {
       btn.addEventListener('touchstart', (e) => { e.preventDefault(); serviceManager.sendMediaKey(code, 'press'); });
@@ -235,14 +238,14 @@ export class UIBuilder {
     volHandler(volDownBtn, 0xEA);
     volHandler(volUpBtn, 0xE9);
 
-    buttonRow1.append(expandBtn, gyroRelBtn, gyroAbsBtn, calibrateBtn, volDownBtn, volUpBtn);
+    buttonRow1.append(gyroRelBtn, gyroAbsBtn, volDownBtn, volUpBtn);
     root.appendChild(buttonRow1);
 
+    // No expand/collapse anymore - the rest of the controls are always visible.
     const expandedArea = document.createElement('div');
     Object.assign(expandedArea.style, {
-      display: 'none', flexDirection: 'column', gap: '10px', marginTop: '10px',
+      display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px',
     });
-    expandBtn.addEventListener('click', () => { expanded = !expanded; updateLayout(); });
 
     // --- Text row: live keyboard + buffered text input ---
     const textRow = document.createElement('div');
@@ -324,23 +327,8 @@ export class UIBuilder {
     modifierRow.appendChild(escBtn);
     expandedArea.appendChild(modifierRow);
 
-    // --- PC power row (gated by capability) ---
-    const pcPowerRow = document.createElement('div');
-    Object.assign(pcPowerRow.style, { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '10px' });
-    pcPowerRow.style.display = this.pcPowerEnabled ? 'grid' : 'none';
-
-    document.addEventListener('pc-power-cap', (e) => {
-      pcPowerRow.style.display = (e as CustomEvent).detail ? 'grid' : 'none';
-    });
-
-    const pcOnBtn = this.createButton('PC ON', () => {
-      if (confirm('Turn PC ON?')) serviceManager.sendPCPower(0x03);
-    }, '14px');
-    const pcOffBtn = this.createButton('PC OFF', () => {
-      if (confirm('Turn PC OFF?')) serviceManager.sendPCPower(0x04);
-    }, '14px');
-    pcPowerRow.append(pcOnBtn, pcOffBtn);
-    expandedArea.appendChild(pcPowerRow);
+    // PC power is controlled entirely via the header button (name/dot area
+    // shows state and toggles it) - no separate ON/OFF buttons here anymore.
 
     if (this.config.debug) {
       const debugRow = document.createElement('div');

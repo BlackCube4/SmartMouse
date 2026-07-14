@@ -20,7 +20,7 @@ function boot() {
   const injected = window.SMARTMOUSE_CONFIG || {};
   const pcPowerEnabled = !!injected.pcPowerEnabled;
 
-  const config: SmartMouseConfig = {
+  const config: SmartMouseConfig & { hideText?: boolean } = {
     type: 'standalone',
     mouseSensitivity: 1.8,
     scrollSensitivity: 3.0,
@@ -31,6 +31,11 @@ function boot() {
     holdTime: 400,
     movementDeadzone: 3,
     debug: false,
+    // The standalone gyro button is icon-only (see UIBuilder) - tell
+    // GyroHandler so its calibration progress/finish messages stay
+    // icon-only too, instead of the HA card's icon+text finish message
+    // overflowing this page's compact single-row buttons.
+    hideText: true,
   };
 
   const setStatus = (status: WsStatus) => {
@@ -40,10 +45,6 @@ function boot() {
 
   const pcPowerBtn = document.getElementById('pc-power-btn');
   const onTelemetry = (t: TelemetryFrame) => {
-    // Legacy events the UI listens for: pc status + capability gating.
-    document.dispatchEvent(new CustomEvent('telemetry', { detail: { pcStat: t.pcState } }));
-    document.dispatchEvent(new CustomEvent('pc-power-cap', { detail: !!(t.caps & 0x01) }));
-
     if (pcPowerBtn) {
       if (t.pcState === 1) { pcPowerBtn.style.background = 'var(--success)'; pcPowerBtn.innerText = 'PC: ON'; }
       else if (t.pcState === 0) { pcPowerBtn.style.background = 'var(--error)'; pcPowerBtn.innerText = 'PC: OFF'; }
@@ -65,6 +66,17 @@ function boot() {
     pcPowerBtn.addEventListener('click', () => serviceManager.sendPCPower(0x01));
   }
 
+  // The device name + connection dot doubles as a restart button (works the
+  // same via mouse click or touch tap, so it's wired once here regardless of
+  // layout, rather than per-layout as before).
+  const statusHeader = document.getElementById('status-header');
+  if (statusHeader) {
+    statusHeader.style.cursor = 'pointer';
+    statusHeader.addEventListener('click', () => {
+      if (confirm('Restart SmartMouse?')) serviceManager.sendReset();
+    });
+  }
+
   const ui = new UIBuilder(config, pcPowerEnabled);
   const rootElement = document.getElementById('root');
   if (!rootElement) return;
@@ -73,11 +85,6 @@ function boot() {
   const isMobile = window.matchMedia('only screen and (max-width: 760px)').matches;
   if (isMobile) {
     ui.setupMobileLayout(rootElement, serviceManager, touchpadHandler, gyroHandler);
-    const statusDot = document.getElementById('ws-status-dot');
-    if (statusDot) {
-      statusDot.style.cursor = 'pointer';
-      statusDot.addEventListener('touchstart', () => serviceManager.sendReset());
-    }
   } else {
     ui.setupDesktopLayout(rootElement, serviceManager);
   }

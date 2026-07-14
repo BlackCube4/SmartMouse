@@ -77,6 +77,10 @@ const char* INDEX_HTML = R"rawliteral(
       display: flex;
       align-items: center;
     }
+    /* The name + connection dot doubles as a restart button (wired in JS). */
+    #status-header:active {
+      opacity: 0.7;
+    }
 
     #setup-link {
       color: var(--text-muted);
