@@ -235,6 +235,11 @@ export class TouchpadHandler {
     // only lifted on the real touchend, so an abrupt stop with the finger still
     // down no longer ends the scroll (and no longer triggers OS scroll inertia).
     const KEEPALIVE_MS = 60;
+    // Extra units added to the first scroll movement so Windows recognises a
+    // scroll gesture immediately instead of hesitating / deciding it's a cursor
+    // move. Once recognised it stays a scroll however slowly you then drag.
+    const SCROLL_PRIME = 20;
+    let primed = false;
     const isTouchpadMode = () => this.config.scrollType !== 'wheel';
 
     const sendMove = (amount: number) => {
@@ -262,6 +267,7 @@ export class TouchpadHandler {
       scrolling = true;
       lastY = e.touches[0].clientY;
       accumulatedScroll = 0;
+      primed = false;
       if (isTouchpadMode()) {
         // Place the fingers right away so the gesture is recognised immediately
         // (removes the "scroll only starts after some travel" dead zone).
@@ -279,10 +285,19 @@ export class TouchpadHandler {
       accumulatedScroll += lastY - currentY;
       lastY = currentY;
 
-      const amount = Math.trunc(accumulatedScroll * this.SCROLL_GAIN);
-      if (amount !== 0) {
-        sendMove(amount);
-        accumulatedScroll -= amount / this.SCROLL_GAIN;
+      const base = Math.trunc(accumulatedScroll * this.SCROLL_GAIN);
+      if (base !== 0) {
+        accumulatedScroll -= base / this.SCROLL_GAIN;
+        let sent = base;
+        // Kick the very first movement (precision-touchpad mode only) so the
+        // gesture is recognised right away; the boost is extra, not drawn from
+        // the accumulator, so it doesn't skew the rest of the scroll. Wheel mode
+        // has no recognition dead zone, so it's left untouched.
+        if (!primed && isTouchpadMode()) {
+          sent += Math.sign(base) * SCROLL_PRIME;
+          primed = true;
+        }
+        sendMove(sent);
       }
     };
 

@@ -17,13 +17,23 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
 
   let lastInputValue = ' ';
 
+  // Keep the caret after the anchor space so Backspace always has that space to
+  // delete - which is what makes a held Backspace keep firing input events (and
+  // keep repeating on the keyboard) instead of stalling after one deletion.
+  const caretEnd = () => {
+    try { const n = input.value.length; input.setSelectionRange(n, n); } catch (e) {}
+  };
+  const reset = () => { input.value = ' '; lastInputValue = ' '; caretEnd(); };
+
+  input.addEventListener('focus', caretEnd);
+
   input.addEventListener('input', () => {
     const val = input.value;
     const diff = val.length - lastInputValue.length;
 
     if (val.length < 1) {
       sm.sendKey(42, 'send'); // Backspace
-      setTimeout(() => { input.value = ' '; lastInputValue = ' '; }, 0);
+      setTimeout(reset, 0);
       return;
     }
 
@@ -35,7 +45,7 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
     }
 
     lastInputValue = val;
-    setTimeout(() => { input.value = ' '; lastInputValue = ' '; }, 0);
+    setTimeout(reset, 0);
   });
 
   input.addEventListener('blur', () => { input.value = ' '; lastInputValue = ' '; });
@@ -44,7 +54,7 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
     if (e.key === 'Enter') {
       e.preventDefault();
       sm.sendKey(40, 'send'); // Enter
-      setTimeout(() => { input.value = ' '; lastInputValue = ' '; }, 0);
+      setTimeout(reset, 0);
     }
   });
 }

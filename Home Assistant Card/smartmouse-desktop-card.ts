@@ -29,10 +29,12 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
     this.style.height = `${config.height || DEFAULT_HEIGHT}px`;
   }
 
-  // Element-scoped listeners can bind declaratively, but pointer lock relies
-  // on document/window-level listeners with no Lit template equivalent, and
-  // "wheel" needs {passive:false} to preventDefault() - both wired manually.
-  protected firstUpdated() {
+  // Listeners are wired in connectedCallback (not firstUpdated) so they are
+  // re-attached every time HA reconnects the element - e.g. after switching
+  // dashboards and coming back, where the same element is reused and
+  // firstUpdated would NOT run again, leaving the card dead until a reload.
+  connectedCallback() {
+    super.connectedCallback();
     this.addEventListener("pointerdown", this.handlePointerDown);
     this.addEventListener("pointerup", this.handlePointerUp);
     this.addEventListener("wheel", this.handleWheel, { passive: false });
@@ -42,11 +44,18 @@ class SmartMouseDesktopCard extends SmartMouseCardBase {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.removeEventListener("pointerdown", this.handlePointerDown);
+    this.removeEventListener("pointerup", this.handlePointerUp);
+    this.removeEventListener("wheel", this.handleWheel);
+    this.removeEventListener("contextmenu", this.handleContextMenu);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
+    // Tear down any active lock session and reset state so a reconnect is clean.
     window.removeEventListener("keydown", this.handleKeyDown, true);
     window.removeEventListener("keyup", this.handleKeyUp, true);
     window.removeEventListener("wheel", this.blockScroll);
     document.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
+    this.isLocked = false;
+    this.lockIntent = false;
   }
 
   // In Home Assistant this card lives inside nested shadow roots, where
