@@ -122,7 +122,7 @@ Each card is configured through Home Assistant's **visual editor** (click the ca
 
 - **Touchpad card:** touchpad sensitivity, scroll sensitivity, scroll type (precision vs. mouse-wheel), invert scroll.
 - **Gyro card:** mode (relative air-mouse vs. absolute laser-pointer), sensitivity, smoothing, jitter suppression (deg/s), custom button text/icon, hide text/hide icon (button shrinks to fit whichever is left), button height.
-- **Input card:** input mode — *Buffered* (type, then press Enter to send), *Live* (sends as you type, reliable but shows a password-style keyboard), or *Predictive* (a normal text field that keeps your phone's autocorrect/word prediction; edits and cursor moves are replayed on the PC).
+- **Input card:** input mode — *Buffered* (type, then press Enter to send), *Live* (sends as you type, reliable but shows a password-style keyboard), or *Predictive* (a normal text field that keeps your phone's autocorrect/word prediction; edits and cursor moves are replayed on the PC, and the field auto-clears after a configurable idle period) — plus a "Debug: Show Raw Text" toggle that displays the field's actual internal buffer below the input (whitespace rendered as visible glyphs, with a marker for the text cursor), for troubleshooting Live/Predictive capture.
 - **Debug card:** no options — drop it on a dashboard to see live gyro sample rate, resolution, and a rough quality verdict, useful when tuning gyro sensitivity/smoothing.
 
 Defaults are sensible, so an unconfigured card works out of the box; adjust in the editor to taste.
