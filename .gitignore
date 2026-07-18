@@ -1,2 +1,7 @@
 node_modules/
-dist/
+
+# Build output is ignored, except the one bundle that ships to Home Assistant
+# users (they copy it into www/). Ignoring the dir *contents* (not the dir
+# itself) is what lets the single file below be re-included.
+Home Assistant Card/dist/*
+!Home Assistant Card/dist/smartmouse-cards.js

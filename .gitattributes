@@ -1,2 +1,14 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Generated build artifacts that are nonetheless committed (see README):
+#  - smartmouse_bundle.h is #included by the firmware C++ build, which has no
+#    Node toolchain, so it must be present to compile.
+#  - smartmouse-cards.js is the built Lovelace bundle HA users copy into www/.
+# Mark them so their large, minified diffs don't clutter reviews:
+#  -diff              -> git shows "Binary files differ" instead of a text diff
+#  linguist-generated -> GitHub collapses them in PRs and excludes from stats
+# (matched by unique basename - gitattributes patterns can't contain the
+#  spaces in these files' directory paths)
+smartmouse_bundle.h -diff linguist-generated=true
+smartmouse-cards.js -diff linguist-generated=true
