@@ -159,17 +159,21 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
   // Reset is deferred slightly (rather than immediately) so a rapid sequence
   // of events - e.g. an on-screen keyboard's Backspace auto-repeat - isn't
   // fighting the field's own value out from under it on every single
-  // keystroke, which on some keyboards suppresses per-repeat haptic feedback
-  // even though the repeat keeps firing correctly. A plain timeout (not
-  // requestAnimationFrame) on purpose - rAF is tied to the page's paint
-  // lifecycle and can be throttled or not fire at all while the page isn't
-  // actively rendering (e.g. backgrounded), which would stall the reset.
+  // keystroke. A plain timeout (not requestAnimationFrame) on purpose - rAF
+  // is tied to the page's paint lifecycle and can be throttled or not fire
+  // at all while the page isn't actively rendering (e.g. backgrounded),
+  // which would stall the reset.
   //
-  // `delayMs` is longer specifically for the "just backspaced the leftmost
-  // anchor away" case (see the `input` handler below) - an experiment to see
-  // if giving that particular case more time before the anchor reappears
-  // helps a mobile keyboard's per-repeat haptic feedback.
-  const scheduleReset = (delayMs = 20) => setTimeout(setRest, delayMs);
+  // NOTE: a wish for per-repeat haptic feedback while holding Backspace on
+  // mobile could not be met. Once the delete reaches the field's left anchor,
+  // the on-screen keyboard vibrates only once instead of on every auto-repeat.
+  // Deferring this reset (tried 0/20/100/200/400/1000ms, touch-gated and not,
+  // plus buffering extra anchors and comparing against the original
+  // single-space design) never restored per-repeat haptics - it appears to be
+  // Gboard's own key-repeat/haptic behaviour for a JS-managed field whose
+  // value keeps changing under it, which a web page has no documented way to
+  // influence. Deletion itself works fine; only the vibration is affected.
+  const scheduleReset = () => setTimeout(setRest, 20);
 
   // Like attachPredictiveInput's, but the field only ever holds the two
   // anchors between edits (nothing persists), so growth only matters for a
@@ -216,12 +220,7 @@ export function attachLiveInput(input: HTMLInputElement, sm: IServiceManager) {
     moveCursor(newCursor);
 
     lastValue = val;
-    // prefix === 0 with something removed means the removed region started
-    // at the very beginning of the old value - i.e. the leftmost anchor
-    // itself was just backspaced away (the "reach into pre-existing PC text"
-    // case), rather than a normal in-bounds edit.
-    const consumedLeftAnchor = prefix === 0 && removed > 0;
-    scheduleReset(consumedLeftAnchor ? 200 : 20);
+    scheduleReset();
   });
 
   input.addEventListener('blur', setRest);

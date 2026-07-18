@@ -127,6 +127,10 @@ Each card is configured through Home Assistant's **visual editor** (click the ca
 
 Defaults are sensible, so an unconfigured card works out of the box; adjust in the editor to taste.
 
+> **Known limitation (Live input, mobile):** when you press-and-hold Backspace on a phone, the on-screen keyboard's per-keystroke haptic feedback only fires once instead of on every auto-repeat, once the delete reaches the start of the field. This was investigated extensively (varying the field-reset delay, buffering extra characters, comparing against the original single-space design) and appears to be Gboard's own key-repeat/haptic behaviour for a JavaScript-managed field whose value keeps changing underneath it — a web page has no documented way to influence it. Deletion itself keeps working correctly; only the vibration is affected. Recorded here so it isn't re-investigated from scratch.
+>
+> **Note (Predictive input + third-party password managers):** some Android password-manager apps (e.g. KeePassDX) may offer an autofill/"sign in" bar over the keyboard on the predictive field. This is the password-manager app's own per-field autofill association (stored in its database, and it can persist across restarts), not something the card sets — the field is a plain `type="text"` input, not a password field. If it bothers you, exclude the Home Assistant app/site in your password manager's autofill settings, or delete its saved association for that field.
+
 ## Standalone Control Page
 Every device also serves its own control page directly at `http://<device>/` (or `http://<name>.local/`) — no Home Assistant required. It mirrors the Lovelace cards (touchpad, gyro, keyboard, media keys) and is handy for a quick control from a phone browser, or as a fallback if Home Assistant is down.
 
