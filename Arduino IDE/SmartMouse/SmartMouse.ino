@@ -18,6 +18,14 @@
 #include "wifi_config_html.h"
 #include "test_sequence.h"
 
+// The shared secret lives in secrets.h, which is not committed (see .gitignore).
+// Copy secrets.example.h to secrets.h and put your own random string in it.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "secrets.h is missing: copy secrets.example.h to secrets.h and set SMARTMOUSE_SECRET"
+#endif
+
 USBHIDKeyboardUTF8 keyboard;
 USBHIDMouse mouse;
 USBHIDConsumerControl media;
@@ -43,7 +51,7 @@ USBHIDTouchpad touchpad;
 // --- COMPILE-TIME DEFAULTS ---
 const bool  ENABLE_TEST_MODE = false; // Set to true to run the test sequence on startup
 const bool  DEFAULT_PC_POWER_ENABLED = false; // Default capability before first setup
-const char* DEFAULT_SECRET   = "CHANGE_ME_SECRET";
+const char* DEFAULT_SECRET   = SMARTMOUSE_SECRET;
 const char* DEFAULT_HOSTNAME = "smartmouse";
 
 Preferences preferences;
@@ -165,8 +173,20 @@ void enterPowerSaving() {
   Serial.println("System: Entering Power Saving (Inactivity).");
 }
 
+// Outside the setup hotspot, every HTTP page needs the secret (HTTP Basic Auth,
+// user "smartmouse", the secret as password). Without this, anyone on the network
+// could open the control page - which hands the secret to the WebSocket - or
+// change the WiFi settings. In AP mode the hotspot password already protects it.
+bool requireAuth() {
+  if (isAPMode) return true;
+  if (server.authenticate("smartmouse", secret_key)) return true;
+  server.requestAuthentication(BASIC_AUTH, "SmartMouse", "Authentication required");
+  return false;
+}
+
 // NEW: Function to handle HTTP requests for the web page
 void handleRoot() {
+  if (!requireAuth()) return;
   wakeUp();
   String html = String(INDEX_HTML);
   html.replace("%PCPWR_ENABLED%", pcPowerEnabled ? "true" : "false");
@@ -180,6 +200,7 @@ void handleBundleJs() {
 }
 
 void handleWifiConfig() {
+  if (!requireAuth()) return;
   String html = String(WIFI_CONFIG_HTML);
   if (pcPowerEnabled) {
     html.replace("%PCPWR_CHECKED%", "checked");
@@ -191,6 +212,7 @@ void handleWifiConfig() {
 }
 
 void handleScan() {
+  if (!requireAuth()) return;
   int n = WiFi.scanNetworks();
   String json = "[";
   for (int i = 0; i < n; ++i) {
@@ -202,11 +224,17 @@ void handleScan() {
 }
 
 void handleCaptive() {
+  // The captive-portal redirect is only useful on the setup hotspot
+  if (!isAPMode) {
+    server.send(404, "text/plain", "Not found");
+    return;
+  }
   server.sendHeader("Location", "/wifi", true);
   server.send(302, "text/plain", "");
 }
 
 void handleSaveConfig() {
+  if (!requireAuth()) return;
   String nSSID = server.arg("ssid");
   String nPass = server.arg("pass");
   String nPCPower = server.arg("pcpwr"); // "on" or empty

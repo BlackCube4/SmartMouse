@@ -48,14 +48,14 @@ Click the green **Code** button on the GitHub page → **Download ZIP** → extr
    - **USB Mode: "USB-OTG (TinyUSB)"** — required, this is what lets the board act as a real keyboard/mouse.
    - **USB CDC On Boot: "Enabled"** — optional, but lets you see debug output over USB in the Serial Monitor.
 4. **Tools → Port** → select the port that appears when the board is plugged in.
-5. *(Optional but recommended)* Open `Arduino IDE/SmartMouse/SmartMouse.ino` and change `DEFAULT_SECRET` (near the top) to your own random string of at least 8 characters — this authenticates WebSocket clients and OTA updates, *and* doubles as the password for the setup hotspot in step 7 below, so don't ship it with the default value.
+5. Copy `Arduino IDE/SmartMouse/secrets.example.h` to `secrets.h` in the same folder and set `SMARTMOUSE_SECRET` to your own random string of at least 8 characters (e.g. `openssl rand -base64 18`). The secret authenticates Home Assistant, the built-in control page and OTA updates, *and* doubles as the password for the setup hotspot in step 7 below. `secrets.h` is ignored by git, so it never ends up in the repository; the sketch does not compile without it.
 
 ### 6. Upload the firmware
 Click the **Upload** button (→ arrow icon). If it fails to find the port or upload: hold the **BOOT** button on the board, tap **RESET** (or plug in the USB cable while holding BOOT), release BOOT, then try Upload again — this forces the board into flashing mode. This is a common one-time hiccup on the very first upload.
 
 ### 7. First boot: connect it to your WiFi
 The board has no network configured yet, so it starts its own WiFi hotspot:
-1. On your phone or laptop, connect to the WiFi network **`SmartMouse-Setup`** (password: whatever you set `DEFAULT_SECRET` to in step 5 — or `SmartMouse123` if you left it at the default, or if your custom secret was under 8 characters).
+1. On your phone or laptop, connect to the WiFi network **`SmartMouse-Setup`** (password: your `SMARTMOUSE_SECRET` from step 5 — or `SmartMouse123` if it is shorter than 8 characters).
 2. A setup page should open automatically (captive portal); if not, open a browser and go to `http://192.168.4.1/wifi`.
 3. Pick your home WiFi network, enter its password, optionally set a "Device Name" (useful once you have more than one SmartMouse — this becomes its hostname, e.g. `<name>.local`), and (if you wired it up) check "Enable PC Power Control".
 4. Click **Save** — the board restarts and joins your home WiFi.
@@ -132,7 +132,7 @@ Defaults are sensible, so an unconfigured card works out of the box; adjust in t
 > **Note (Predictive input + third-party password managers):** some Android password-manager apps (e.g. KeePassDX) may offer an autofill/"sign in" bar over the keyboard on the predictive field. This is the password-manager app's own per-field autofill association (stored in its database, and it can persist across restarts), not something the card sets — the field is a plain `type="text"` input, not a password field. If it bothers you, exclude the Home Assistant app/site in your password manager's autofill settings, or delete its saved association for that field.
 
 ## Standalone Control Page
-Every device also serves its own control page directly at `http://<device>/` (or `http://<name>.local/`) — no Home Assistant required. It mirrors the Lovelace cards (touchpad, gyro, keyboard, media keys) and is handy for a quick control from a phone browser, or as a fallback if Home Assistant is down.
+Every device also serves its own control page directly at `http://<device>/` (or `http://<name>.local/`) — no Home Assistant required. The browser asks for a login: user name `smartmouse`, password your secret. The WiFi settings page `http://<device>/wifi` is protected the same way; only on the setup hotspot are the pages open. It mirrors the Lovelace cards (touchpad, gyro, keyboard, media keys) and is handy for a quick control from a phone browser, or as a fallback if Home Assistant is down.
 
 - Tapping the device name in the top-left (next to the connection dot) restarts the ESP, after a confirmation prompt.
 - Connection dot colors: 🟢 green = connected, 🟡 yellow = connecting/reconnecting, 🔴 red = disconnected.

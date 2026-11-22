@@ -5,3 +5,6 @@ node_modules/
 # itself) is what lets the single file below be re-included.
 Home Assistant Card/dist/*
 !Home Assistant Card/dist/smartmouse-cards.js
+
+# Local secret for the firmware (copy secrets.example.h)
+Arduino IDE/SmartMouse/secrets.h
