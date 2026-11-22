@@ -176,3 +176,12 @@ PROTOCOL.md                  the binary opcode reference (single source of truth
 ```
 
 **One source of truth.** The gesture/sensor logic (gyro smoothing, touchpad, live text input) lives once in TypeScript and is shared by both the Home Assistant cards *and* the firmware's built-in web page. `npm run build` in `Home Assistant Card/` produces two bundles — `dist/smartmouse-cards.js` (for HA) and the standalone page's JS, which `scripts/embed-bundle.mjs` writes into `Arduino IDE/SmartMouse/smartmouse_bundle.h` (served by the ESP at `/smartmouse.js`). So a fix to a handler reaches both surfaces; after changing any TypeScript, rebuild and reflash. `smartmouse_bundle.h` is generated — never edit it by hand.
+
+## License
+
+Copyright (C) 2025-2026 BlackCube4
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE) for the full text.
